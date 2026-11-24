@@ -1,0 +1,28 @@
+name: Build playable edition
+
+on:
+  push:
+    branches: [game/3d, game/isometric]
+  pull_request:
+    branches: [game/3d, game/isometric]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      EDITION: ${{ (github.base_ref || github.ref_name) == 'game/3d' && 'gnev-glubin-3d' || 'gnev-glubin-iso' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm --prefix "$EDITION" install --no-audit --no-fund
+      - run: npm --prefix "$EDITION" run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.EDITION }}
+          path: ${{ env.EDITION }}/dist/gnev-glubin-*.html
+          if-no-files-found: error
