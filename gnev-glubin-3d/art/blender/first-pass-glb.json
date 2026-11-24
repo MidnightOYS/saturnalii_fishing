@@ -1,0 +1,137 @@
+[
+  {
+    "file": "boat.glb",
+    "triangles": 10534,
+    "mats": [
+      "Aged oak | storm-washed",
+      "Hammered bronze | patina",
+      "Painted oak | oxidized blue"
+    ],
+    "images": [
+      "wood_normal",
+      "wood_orm",
+      "wood_basecolor",
+      "bronze_normal",
+      "bronze_orm",
+      "bronze_basecolor",
+      "teal_normal",
+      "teal_orm",
+      "teal_basecolor"
+    ],
+    "anchors": {
+      "buoy_bow": [
+        0,
+        0,
+        1.2999999523162842
+      ],
+      "buoy_port": [
+        -0.550000011920929,
+        0,
+        0
+      ],
+      "buoy_starboard": [
+        0.550000011920929,
+        0,
+        0
+      ],
+      "buoy_stern": [
+        0,
+        0,
+        -1.190000057220459
+      ],
+      "seat_fisher": [
+        0,
+        0.26499998569488525,
+        0.3400000035762787
+      ],
+      "Boat": [
+        0,
+        0,
+        0
+      ]
+    },
+    "clips": [],
+    "bytes": 6395300
+  },
+  {
+    "file": "rod.glb",
+    "triangles": 2360,
+    "mats": [
+      "Aged oak | storm-washed",
+      "Hammered bronze | patina"
+    ],
+    "images": [
+      "wood_normal",
+      "wood_orm",
+      "wood_basecolor",
+      "bronze_normal",
+      "bronze_orm",
+      "bronze_basecolor"
+    ],
+    "anchors": {
+      "line_tip": [
+        0.25,
+        1.6269999742507935,
+        -2.0299999713897705
+      ],
+      "Rod": [
+        0,
+        0,
+        0
+      ]
+    },
+    "clips": [],
+    "bytes": 3622588
+  },
+  {
+    "file": "bobber.glb",
+    "triangles": 922,
+    "mats": [
+      "Fishing float | fired ochre and slip"
+    ],
+    "images": [
+      "float_normal",
+      "float_orm",
+      "float_basecolor"
+    ],
+    "anchors": {
+      "line_attach": [
+        0,
+        0.3709999918937683,
+        0
+      ],
+      "Bobber": [
+        0,
+        0,
+        0
+      ]
+    },
+    "clips": [],
+    "bytes": 566524
+  },
+  {
+    "file": "dock_deck.glb",
+    "triangles": 1704,
+    "mats": [
+      "Aged oak | storm-washed",
+      "Hammered bronze | patina"
+    ],
+    "images": [
+      "wood_normal",
+      "wood_orm",
+      "wood_basecolor",
+      "bronze_normal",
+      "bronze_orm",
+      "bronze_basecolor"
+    ],
+    "anchors": {
+      "Dock_Deck": [
+        0,
+        0,
+        0
+      ]
+    },
+    "clips": [],
+    "bytes": 3693408
+  }
+]

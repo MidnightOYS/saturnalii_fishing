@@ -1,0 +1,131 @@
+[
+  {
+    "file": "dock.glb",
+    "triangles": 25820,
+    "mats": [
+      "Aged oak | storm-washed",
+      "Coastal limestone | blue-grey",
+      "Hammered bronze | patina",
+      "Fishing float | fired ochre and slip",
+      "Painted oak | oxidized blue"
+    ],
+    "images": [
+      "wood_normal",
+      "wood_orm",
+      "wood_basecolor",
+      "stone_normal",
+      "stone_orm",
+      "stone_basecolor",
+      "bronze_normal",
+      "bronze_orm",
+      "bronze_basecolor",
+      "float_normal",
+      "float_orm",
+      "float_basecolor",
+      "teal_normal",
+      "teal_orm",
+      "teal_basecolor"
+    ],
+    "anchors": {
+      "camera_dock": [
+        9.800000190734863,
+        7.699999809265137,
+        12.600000381469727
+      ],
+      "camera_dock_target": [
+        -0.4000000059604645,
+        0.10000000149011612,
+        -2.200000047683716
+      ],
+      "interact_boat": [
+        1.5800000429153442,
+        0.9599999785423279,
+        0.800000011920929
+      ],
+      "interact_shop": [
+        -2.799999952316284,
+        2.380000114440918,
+        -1.649999976158142
+      ],
+      "lamp_dock": [
+        -0.550000011920929,
+        1,
+        2.3499999046325684
+      ],
+      "lamp_shop": [
+        1.4800000190734863,
+        1.5199999809265137,
+        0.9700000286102295
+      ],
+      "Shop": [
+        -2.799999952316284,
+        0.5099999904632568,
+        -1.649999976158142
+      ],
+      "Dock": [
+        0,
+        0,
+        0
+      ]
+    },
+    "clips": [],
+    "bytes": 12156196
+  },
+  {
+    "file": "pond.glb",
+    "triangles": 16840,
+    "mats": [
+      "Aged oak | storm-washed",
+      "Coastal limestone | blue-grey",
+      "Fishing float | fired ochre and slip",
+      "Hammered bronze | patina",
+      "Painted oak | oxidized blue"
+    ],
+    "images": [
+      "wood_normal",
+      "wood_orm",
+      "wood_basecolor",
+      "stone_normal",
+      "stone_orm",
+      "stone_basecolor",
+      "float_normal",
+      "float_orm",
+      "float_basecolor",
+      "bronze_normal",
+      "bronze_orm",
+      "bronze_basecolor",
+      "teal_normal",
+      "teal_orm",
+      "teal_basecolor"
+    ],
+    "anchors": {
+      "boat_spawn": [
+        1,
+        0,
+        0
+      ],
+      "camera_pond": [
+        12,
+        19,
+        17.75
+      ],
+      "camera_pond_target": [
+        1,
+        0,
+        -1.25
+      ],
+      "landmark_shrine": [
+        0.5,
+        2.450000047683716,
+        -29.459999084472656
+      ],
+      "Pond": [
+        0,
+        0,
+        0
+      ]
+    },
+    "clips": [],
+    "bytes": 11791940
+  }
+]

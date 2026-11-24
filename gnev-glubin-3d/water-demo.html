@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#142224">
+  <title>Гнев глубин · Вода A/B/C</title>
+</head>
+<body>
+  <main id="water-viewport" aria-label="Трёхмерная сцена с лодкой, причалом и скалами"></main>
+  <header class="title">
+    <p>Гнев глубин</p>
+    <h1>Вода у причала</h1>
+  </header>
+  <section class="controls" aria-label="Управление демкой">
+    <div class="scenarios" aria-label="Проверочные сцены">
+      <button data-scenario="calm" aria-pressed="true">Штиль</button>
+      <button data-scenario="turn" aria-pressed="false">Поворот у скалы</button>
+      <button data-scenario="storm" aria-pressed="false">Шторм и поплавок</button>
+      <button id="pause" aria-pressed="false">Стоп-кадр</button>
+    </div>
+    <div class="help">
+      <span><kbd>WASD</kbd> лодка</span>
+      <span><kbd>Пробел</kbd> заброс</span>
+      <span><kbd>R</kbd> поклёвка</span>
+    </div>
+    <div class="touch-actions" aria-label="Управление с экрана">
+      <button data-move="KeyA" aria-label="Влево">←</button>
+      <button data-move="KeyW" aria-label="Вперёд">↑</button>
+      <button data-move="KeyS" aria-label="Назад">↓</button>
+      <button data-move="KeyD" aria-label="Вправо">→</button>
+      <button id="touch-cast">Заброс</button><button id="touch-bite">Поклёвка</button>
+    </div>
+  </section>
+  <div id="status" role="status" data-phase="loading">Загрузка гавани…</div>
+  <details class="panel" open>
+    <summary>Инспектор воды</summary>
+    <div class="compare">
+      <div class="variant-buttons" aria-label="Вид воды">
+        <button data-variant="A" aria-pressed="true"><strong>A</strong><span>Гавань</span></button>
+        <button data-variant="B" aria-pressed="false"><strong>B</strong><span>Открытое море</span></button>
+        <button data-variant="C" aria-pressed="false"><strong>C</strong><span>Лагуна</span></button>
+      </div>
+      <p id="variant-description">Исходные волны Герстнера</p>
+    </div>
+    <div class="panel-body">
+      <div class="inspector-nav" aria-label="Режим инспектора">
+        <button id="show-settings" aria-pressed="true" aria-controls="settings">Материал</button>
+        <button id="show-effects" aria-pressed="false" aria-controls="effects">Эффекты</button>
+      </div>
+      <div id="settings">
+        <label class="range">Гнев <output for="wrath">0%</output><input id="wrath" type="range" min="0" max="1" step=".01" value="0"></label>
+        <label class="palette-select">Общая палитра
+          <select id="palette"><option value="" disabled>Своя палитра</option></select>
+        </label>
+        <div class="palette-preview" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div id="material-settings"></div>
+        <label class="select">Зеркальный проход
+          <select id="reflection-quality">
+            <option value="off">Выкл.</option>
+            <option value="balanced" selected>48%</option>
+            <option value="full">100%</option>
+          </select>
+        </label>
+      </div>
+      <div id="effects" hidden>
+        <div class="effect-actions">
+          <button id="effects-on">Включить всё</button>
+          <button id="effects-off">Выключить всё</button>
+        </div>
+        <div id="effect-list"></div>
+      </div>
+    </div>
+    <div class="panel-footer">
+        <output id="render-info" aria-label="Частота кадров и разрешение отражения"></output>
+      <button id="reset">Сбросить вид</button>
+      <button id="export-open">Экспорт JSON</button>
+    </div>
+  </details>
+  <dialog id="export-dialog">
+    <form method="dialog" class="export-head">
+      <h2>Настройки воды</h2>
+      <button aria-label="Закрыть">Закрыть</button>
+    </form>
+    <textarea id="export-text" readonly rows="12" aria-label="JSON с настройками воды"></textarea>
+    <div class="export-actions">
+      <button id="export-copy">Скопировать</button>
+      <button id="export-download">Скачать JSON</button>
+    </div>
+  </dialog>
+  <script type="module" src="/src/water-demo.ts"></script>
+</body>
+</html>

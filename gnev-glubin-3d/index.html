@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101d1c">
+  <link rel="icon" href="data:,">
+  <title>Гнев глубин · 3D</title>
+</head>
+<body>
+  <main id="game">
+    <div id="scene" aria-hidden="true"></div>
+    <div class="vignette" aria-hidden="true"></div>
+    <header class="top">
+      <div class="wordmark"><span class="sigil" aria-hidden="true">♆</span><strong>Гнев глубин</strong></div>
+      <div class="status">
+        <span><span id="gold">0</span> др.</span>
+        <span>Опыт <span id="xp">0</span></span>
+      </div>
+    </header>
+
+    <section id="dock" aria-labelledby="dock-name">
+      <div class="place"><span class="eyebrow">Угодья Посейдона</span><h1 id="dock-name">Причал</h1><p id="dock-goal"></p></div>
+      <button id="dock-shop" class="hotspot" data-action="shop"><span aria-hidden="true"></span> Лавка</button>
+      <button id="dock-boat" class="hotspot" data-action="map"><span aria-hidden="true"></span> Лодка</button>
+    </section>
+
+    <section id="fishing" aria-labelledby="zone-name" hidden>
+      <div class="place fishing-place">
+        <span id="stage" class="eyebrow"></span><h1 id="zone-name"></h1>
+        <div class="readouts">
+          <div><label for="wrath">Гнев <span id="wrath-number"></span></label><progress id="wrath" max="100" value="0"></progress></div>
+          <div><span>Квота</span><strong id="quota"></strong></div>
+          <div><span>Здоровье</span><strong id="health"></strong></div>
+        </div>
+      </div>
+      <div class="water-actions">
+        <button id="bow-button" data-action="bow" aria-pressed="false">Лук <kbd>F</kbd></button>
+        <button data-action="hold">Трюм</button>
+        <button data-action="offering">Подношение <span id="offerings"></span> <kbd>O</kbd></button>
+        <button data-action="return">Вернуться</button>
+      </div>
+      <div id="attack" role="status" hidden></div>
+      <div class="fishing-bottom">
+        <p id="notice" role="status"></p>
+        <div id="phase" class="phase" aria-live="polite"></div>
+        <div id="cast-meter" class="fight" hidden><div><label for="cast-charge">Дальность заброса <span id="cast-distance"></span></label><progress id="cast-charge" max="1" value="0"></progress></div></div>
+        <div id="bow-meter" class="fight" hidden><div><label for="bow-draw">Натяжение лука</label><progress id="bow-draw" max="1" value="0"></progress></div></div>
+        <div id="timing" class="timing" hidden><span id="timing-band"></span><i id="marker"></i></div>
+        <div id="fight" class="fight" hidden>
+          <div><label for="tension">Натяжение <span id="tension-number"></span></label><progress id="tension" max="100" value="0"></progress></div>
+          <div><label for="distance">Леска <span id="distance-number"></span></label><progress id="distance" value="0"></progress></div>
+        </div>
+      </div>
+    </section>
+
+    <dialog id="menu" aria-labelledby="menu-title"><div id="menu-content"></div></dialog>
+    <section id="hold" aria-labelledby="hold-title" hidden></section>
+    <p id="render-error" role="status" hidden>3D-сцена недоступна. Для её показа нужен WebGL.</p>
+  </main>
+  <script type="module" src="./src/main.ts"></script>
+</body>
+</html>

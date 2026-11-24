@@ -1,0 +1,372 @@
+{
+  "units": "m",
+  "coordinates": "Three.js Y-up X,Y,Z",
+  "assets": [
+    {
+      "file": "public/models/boat.glb",
+      "bytes": 6395300,
+      "sha256": "effdb2abc1dad9dd176683111574f7a833a957579aa68d8156325a780c4a6cd7",
+      "triangles": 10534,
+      "draw_primitives": 3,
+      "points": {
+        "Boat": [
+          0,
+          0,
+          0
+        ],
+        "buoy_bow": [
+          0.0,
+          0.0,
+          1.3
+        ],
+        "buoy_port": [
+          -0.55,
+          0.0,
+          0.0
+        ],
+        "buoy_starboard": [
+          0.55,
+          0.0,
+          0.0
+        ],
+        "buoy_stern": [
+          0.0,
+          0.0,
+          -1.19
+        ],
+        "seat_fisher": [
+          0.0,
+          0.265,
+          0.34
+        ]
+      },
+      "clips": [],
+      "dimensions_xyz_m": [
+        1.5203,
+        1.2753,
+        3.609
+      ],
+      "materials": [
+        {
+          "name": "Aged oak | storm-washed",
+          "base_color_normal_orm": [
+            "wood_basecolor",
+            "wood_normal",
+            "wood_orm"
+          ]
+        },
+        {
+          "name": "Hammered bronze | patina",
+          "base_color_normal_orm": [
+            "bronze_basecolor",
+            "bronze_normal",
+            "bronze_orm"
+          ]
+        },
+        {
+          "name": "Painted oak | oxidized blue",
+          "base_color_normal_orm": [
+            "teal_basecolor",
+            "teal_normal",
+            "teal_orm"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "public/models/rod.glb",
+      "bytes": 3622588,
+      "sha256": "f1ad176b561b206509c74ecfd84445e89f09fcfafe6265b2b835e114fae053d7",
+      "triangles": 2360,
+      "draw_primitives": 2,
+      "points": {
+        "Rod": [
+          0,
+          0,
+          0
+        ],
+        "line_tip": [
+          0.25,
+          1.627,
+          -2.03
+        ]
+      },
+      "clips": [],
+      "dimensions_xyz_m": [
+        0.3333,
+        1.8488,
+        2.2172
+      ],
+      "materials": [
+        {
+          "name": "Aged oak | storm-washed",
+          "base_color_normal_orm": [
+            "wood_basecolor",
+            "wood_normal",
+            "wood_orm"
+          ]
+        },
+        {
+          "name": "Hammered bronze | patina",
+          "base_color_normal_orm": [
+            "bronze_basecolor",
+            "bronze_normal",
+            "bronze_orm"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "public/models/bobber.glb",
+      "bytes": 566524,
+      "sha256": "56768a0669d65588cb142515603d6e19e00489ec90f720aab06b74274698c62c",
+      "triangles": 922,
+      "draw_primitives": 1,
+      "points": {
+        "Bobber": [
+          0,
+          0,
+          0
+        ],
+        "line_attach": [
+          0.0,
+          0.371,
+          0.0
+        ]
+      },
+      "clips": [],
+      "dimensions_xyz_m": [
+        0.274,
+        0.5583,
+        0.274
+      ],
+      "materials": [
+        {
+          "name": "Fishing float | fired ochre and slip",
+          "base_color_normal_orm": [
+            "float_basecolor",
+            "float_normal",
+            "float_orm"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "public/models/dock_deck.glb",
+      "bytes": 3693408,
+      "sha256": "4a803da469597feb98f4714965c44cea691f3e9b50f79c7c51b35b978f8e4790",
+      "triangles": 1704,
+      "draw_primitives": 2,
+      "points": {
+        "Dock_Deck": [
+          0,
+          0,
+          0
+        ]
+      },
+      "clips": [],
+      "dimensions_xyz_m": [
+        5.2652,
+        0.3869,
+        2.0577
+      ],
+      "materials": [
+        {
+          "name": "Aged oak | storm-washed",
+          "base_color_normal_orm": [
+            "wood_basecolor",
+            "wood_normal",
+            "wood_orm"
+          ]
+        },
+        {
+          "name": "Hammered bronze | patina",
+          "base_color_normal_orm": [
+            "bronze_basecolor",
+            "bronze_normal",
+            "bronze_orm"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "public/models/dock.glb",
+      "bytes": 12156196,
+      "sha256": "38ea0ef9beeeb704fad6255b9849e02afa197442e2fa2215c2d8c25136b713e2",
+      "triangles": 25820,
+      "draw_primitives": 11,
+      "points": {
+        "Dock": [
+          0,
+          0,
+          0
+        ],
+        "camera_dock": [
+          9.8,
+          7.7,
+          12.6
+        ],
+        "camera_dock_target": [
+          -0.4,
+          0.1,
+          -2.2
+        ],
+        "interact_boat": [
+          1.58,
+          0.96,
+          0.8
+        ],
+        "interact_shop": [
+          -2.8,
+          2.38,
+          -1.65
+        ],
+        "lamp_dock": [
+          -0.55,
+          1.0,
+          2.35
+        ],
+        "Shop": [
+          -2.8,
+          0.51,
+          -1.65
+        ],
+        "lamp_shop": [
+          -1.32,
+          2.03,
+          -0.68
+        ]
+      },
+      "clips": [],
+      "dimensions_xyz_m": [
+        34.6959,
+        10.6126,
+        35.8678
+      ],
+      "materials": [
+        {
+          "name": "Aged oak | storm-washed",
+          "base_color_normal_orm": [
+            "wood_basecolor",
+            "wood_normal",
+            "wood_orm"
+          ]
+        },
+        {
+          "name": "Coastal limestone | blue-grey",
+          "base_color_normal_orm": [
+            "stone_basecolor",
+            "stone_normal",
+            "stone_orm"
+          ]
+        },
+        {
+          "name": "Hammered bronze | patina",
+          "base_color_normal_orm": [
+            "bronze_basecolor",
+            "bronze_normal",
+            "bronze_orm"
+          ]
+        },
+        {
+          "name": "Fishing float | fired ochre and slip",
+          "base_color_normal_orm": [
+            "float_basecolor",
+            "float_normal",
+            "float_orm"
+          ]
+        },
+        {
+          "name": "Painted oak | oxidized blue",
+          "base_color_normal_orm": [
+            "teal_basecolor",
+            "teal_normal",
+            "teal_orm"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "public/models/pond.glb",
+      "bytes": 11791940,
+      "sha256": "bfbfd07f61ca355d4c3442f59dfa5b93acdede771479c6eb153ba0a97d075899",
+      "triangles": 16840,
+      "draw_primitives": 5,
+      "points": {
+        "Pond": [
+          0,
+          0,
+          0
+        ],
+        "boat_spawn": [
+          1,
+          0,
+          0
+        ],
+        "camera_pond": [
+          12.0,
+          19.0,
+          17.75
+        ],
+        "camera_pond_target": [
+          1.0,
+          0.0,
+          -1.25
+        ],
+        "landmark_shrine": [
+          0.5,
+          2.45,
+          -29.46
+        ]
+      },
+      "clips": [],
+      "dimensions_xyz_m": [
+        59.5292,
+        9.8655,
+        57.8257
+      ],
+      "materials": [
+        {
+          "name": "Aged oak | storm-washed",
+          "base_color_normal_orm": [
+            "wood_basecolor",
+            "wood_normal",
+            "wood_orm"
+          ]
+        },
+        {
+          "name": "Coastal limestone | blue-grey",
+          "base_color_normal_orm": [
+            "stone_basecolor",
+            "stone_normal",
+            "stone_orm"
+          ]
+        },
+        {
+          "name": "Fishing float | fired ochre and slip",
+          "base_color_normal_orm": [
+            "float_basecolor",
+            "float_normal",
+            "float_orm"
+          ]
+        },
+        {
+          "name": "Hammered bronze | patina",
+          "base_color_normal_orm": [
+            "bronze_basecolor",
+            "bronze_normal",
+            "bronze_orm"
+          ]
+        },
+        {
+          "name": "Painted oak | oxidized blue",
+          "base_color_normal_orm": [
+            "teal_basecolor",
+            "teal_normal",
+            "teal_orm"
+          ]
+        }
+      ]
+    }
+  ]
+}
