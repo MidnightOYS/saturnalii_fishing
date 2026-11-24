@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#151c22">
+  <title>Гнев глубин · Изометрия</title>
+</head>
+<body>
+  <main id="game">
+    <canvas id="scene" aria-label="Изометрическая карта водоёма"></canvas>
+    <header class="top">
+      <div class="brand"><span class="sigil" aria-hidden="true">Ψ</span><div><h1>Гнев глубин</h1><p id="place">Причал</p></div></div>
+      <div class="stats">
+        <div id="wrath" hidden>
+          <div class="meter-label"><span id="stage">Тихая вода</span><span id="wrath-value">0%</span></div>
+          <progress id="wrath-bar" max="100" value="0" aria-label="Гнев Посейдона"></progress>
+        </div>
+        <div id="resources"><span id="health" hidden></span><span id="gold"></span></div>
+      </div>
+    </header>
+    <section class="panel dock" id="port" aria-labelledby="port-heading">
+      <div class="panel-intro"><h2 id="port-heading">Куда выйти?</h2><p>Уложи улов на два очка и вернись к причалу. В лавке можно продать рыбу и починить лодку.</p></div>
+      <div id="destinations" class="destinations"></div>
+      <div class="store" id="store"></div>
+    </section>
+    <section id="status" class="status panel" hidden>
+      <p class="phase" id="phase"></p>
+      <p id="instruction"></p>
+      <div class="bite" id="bite" hidden aria-label="Шкала подсечки"><i id="band"></i><b id="marker"></b></div>
+      <div id="fight" hidden><div class="meter-label"><span>Натяжение</span><span id="line-value"></span></div><progress id="tension" max="100" value="0" aria-label="Натяжение лески"></progress></div>
+    </section>
+    <aside class="panel pack" id="pack" hidden aria-labelledby="pack-heading">
+      <h2 id="pack-heading">Трюм</h2>
+      <p id="caught"></p>
+      <div class="grid" id="grid" aria-label="Ячейки трюма"></div>
+      <div class="actions"><button data-action="rotate">Повернуть · R</button><button data-action="stack">Сложить</button><button data-action="release">Выпустить</button></div>
+      <p id="pack-notice" role="status"></p>
+    </aside>
+    <section class="panel result" id="result" hidden aria-labelledby="result-heading">
+      <h2 id="result-heading"></h2><p id="result-body"></p>
+      <button data-action="continue" class="primary">На причал</button>
+    </section>
+    <footer id="hud" hidden>
+      <div class="cargo-summary"><span id="quota"></span><span id="notice" role="status"></span></div>
+      <div class="actions">
+        <button data-action="repel" id="repel" hidden>Отпугнуть · F</button>
+        <button data-action="offering" id="offering">Подношение · O</button>
+        <button data-action="return" id="return" class="primary">Вернуться · E</button>
+      </div>
+    </footer>
+  </main>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
