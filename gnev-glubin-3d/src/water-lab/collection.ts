@@ -15,11 +15,22 @@ import { createSlopeLight } from './slope-light';
 
 export type CollectionCamera = T.OrthographicCamera | T.PerspectiveCamera;
 type Bed = ReturnType<typeof createWatercolorBed>;
+export type ExpeditionWaterStyle = {
+  deep: T.Color;
+  shallow: T.Color;
+  mixing: number;
+  foam: number;
+  foamGain: number;
+  glints: number;
+  caustics: number;
+  lamps: number;
+};
 export type CollectionFrame = WaterLighting & {
   camera: CollectionCamera;
   hull?: WaterPoint & { heading: number };
   surge?: number;
   threat?: WaterPoint & { strength: number; heading: number };
+  expedition?: ExpeditionWaterStyle;
 };
 export type WaterCollectionOptions = {
   renderer: T.WebGLRenderer;
@@ -80,6 +91,12 @@ export function createWaterCollection({
   scene.add(classic.mesh, painted.water.mesh);
 
   const uniforms = createLabUniforms();
+  uniforms.uGameWater.value = Number(!!locationSurface);
+  if (locationSurface && lamps) {
+    for (const [index, lamp] of lamps.slice(0, 4).entries()) {
+      uniforms.uSceneLamps.value[index].set(lamp.position.x, lamp.position.y, lamp.position.z, lamp.strength);
+    }
+  }
   const { minX, minZ, maxX, maxZ } = bounds;
   const width = maxX - minX, depth = maxZ - minZ;
   const rect = new T.Vector4(minX, minZ, width, depth);
@@ -97,7 +114,7 @@ export function createWaterCollection({
   const uLayerStyle = { value: 0 }, uLayerAmount = { value: 1 };
   const sea = new T.Mesh<T.BufferGeometry,T.Material>(geometry);
   const placeholder = sea.material;
-  const optics = createRefraction(renderer, scene, sea, { ...uniforms, uLayerStyle, uLayerAmount });
+  const optics = createRefraction(renderer, scene, sea, { ...uniforms, uLayerStyle, uLayerAmount }, locationSurface);
   const slopes = createSlopeLight(uniforms);
   const breakers = createBreakers(uniforms,
     breakerSites ?? (comparisonScenery ? undefined : automaticBreakerSites(bounds)), locationSurface);
@@ -114,6 +131,8 @@ export function createWaterCollection({
   const worldSun = new T.Vector3();
   const baseSun = uniforms.uSun.value.clone();
   const paintSky = new T.Color(), paintSun = new T.Color();
+  const crest = new T.Color();
+  const surfacePalette = { deep: uniforms.uDeep.value, shallow: uniforms.uShallow.value, crest };
   let time = 0;
   let chosenMode = mode;
   let currentMode: Mode | undefined;
@@ -139,11 +158,14 @@ export function createWaterCollection({
         bed.floor.visible = sceneLayers && isOptical(next) && next !== 'refraction' ? false : normalFloorVisibility;
       }
     }
-    active = currentMode === chosenMode ? settings
-      : { ...harborSettings(), waves: settings.waves, light: settings.light, shallow: settings.shallow, deep: settings.deep };
+    active = currentMode === chosenMode ? settings : {
+      ...harborSettings(), waves: settings.waves, light: settings.light, shallow: settings.shallow, deep: settings.deep,
+      ...(locationSurface && { reflection: .68, detail: settings.detail * .87, foam: .86, waveScale: .93, scattering: .76 }),
+    };
   }
 
   function select(next: Mode, overrides?: Partial<LabSettings>) {
+    if (locationSurface && chosenMode !== next) clearTransient();
     chosenMode = next;
     settings = { ...defaultCollectionSettings(next), ...overrides };
     activate();
@@ -170,10 +192,23 @@ export function createWaterCollection({
     uniforms.uWaves.value = active.waves;
     uniforms.uWind.value = active.wind;
     uniforms.uLight.value = active.light;
-    uniforms.uFeature.value = active.feature;
+    const style = frame.expedition;
+    const causticGain = style?.caustics ?? 1;
+    uniforms.uFeature.value = active.feature * (isOptical(mode) ? causticGain : 1);
     uniforms.uDetail.value = active.detail;
     uniforms.uDeep.value.set(active.deep);
     uniforms.uShallow.value.set(active.shallow);
+    const sceneSun = frame.sunPower ?? 1;
+    if (style) {
+      uniforms.uDeep.value.lerp(style.deep, style.mixing);
+      uniforms.uShallow.value.lerp(style.shallow, style.mixing);
+      crest.set(active.crest ?? active.shallow).lerp(style.shallow, style.mixing * .72);
+      uniforms.uSceneSky.value.copy(frame.sky ?? defaultSky);
+      uniforms.uSceneFog.value = (frame.fog ?? .006) * .52;
+      uniforms.uSceneSun.value = style.glints * Math.min(sceneSun / 1.4, 1.55);
+      uniforms.uSceneFoam.value = style.foam * style.foamGain;
+      uniforms.uSceneLampGain.value = style.lamps;
+    }
     if (paintedMode && !frame.sunDirection) {
       worldSun.set(-.57, (active.elevation ?? .82) * 1.6, -.81).normalize();
     } else {
@@ -200,20 +235,21 @@ export function createWaterCollection({
     target.crest = active.crest ?? active.shallow;
     target.reflection = active.reflection ?? target.reflection;
     target.distortion = active.detail;
-    target.foam = active.foam ?? 1;
-    target.wake = active.wake ?? (mode === 'watercolor' ? target.foam * 1.23 : 1);
+    const foam = active.foam ?? 1;
+    target.foam = foam * (style ? T.MathUtils.lerp(.60, 1, style.foam) * style.foamGain : 1);
+    target.wake = active.wake ?? (mode === 'watercolor' ? foam * 1.23 : 1);
     target.clarity = active.clarity ?? 1;
     target.roughness = active.roughness ?? .38;
     target.scattering = active.scattering ?? 1;
     target.stormStrength = active.stormStrength ?? 1;
     target.reflectionQuality = mode === 'watercolor' ? 'off' : (active.reflectionQuality ?? 'balanced');
     Object.assign(water.effects, waterEffects, active.effects);
-    let fog = frame.fog ?? .006;
+    let fog = (frame.fog ?? .006) * (style && supportsLab ? .52 : 1);
     let sky = frame.sky ?? defaultSky;
     let sunColor = frame.sunColor ?? defaultSun;
     if (mode === 'watercolor') {
       const storm = T.MathUtils.smoothstep(normalizedWrath, 0, 1);
-      fog = frame.fog ?? (.004 + storm * .008);
+      if (frame.fog === undefined) fog = .004 + storm * .008;
       sky = frame.sky ?? paintSky.set(active.sky ?? '#59757a').lerp(watercolorStormSky, storm);
       sunColor = frame.sunColor ?? paintSun.set(active.sun ?? '#faf0cd');
       painted.ink.set(active.ink ?? '#22293c');
@@ -225,7 +261,9 @@ export function createWaterCollection({
     }
     water.update(time, normalizedWrath, {
       sky, fog, sunDirection: worldSun, sunColor,
-      sunPower: frame.sunPower ?? active.light,
+      sunPower: style ? sceneSun * style.glints * active.light : (frame.sunPower ?? active.light),
+      ...(style && { surfacePalette }),
+      causticGain, lampGain: style?.lamps,
       glintOrigin: frame.glintOrigin ?? (canShowHull && mode !== 'watercolor' ? { x: x - 3, z: z - 6 } : { x: -3, z: -6 }),
     });
   }
@@ -263,6 +301,19 @@ export function createWaterCollection({
     }
   }
 
+  function clearRipples() {
+    classic.clearRipples();
+    painted.water.clearRipples();
+    uniforms.uCast.value.set(1000, 1000, -100, 0);
+  }
+
+  function clearTransient() {
+    classic.clearTransient();
+    painted.water.clearTransient();
+    wake.clear();
+    uniforms.uCast.value.set(1000, 1000, -100, 0);
+  }
+
   activate();
   return {
     get mode() { return chosenMode; },
@@ -284,12 +335,7 @@ export function createWaterCollection({
       painted.water.ripple(x, z, strength, time);
       uniforms.uCast.value.set(x, z, time, strength);
     },
-    clearTransient() {
-      classic.clearTransient();
-      painted.water.clearTransient();
-      wake.clear();
-      uniforms.uCast.value.set(1000, 1000, -100, 0);
-    },
+    clearRipples, clearTransient,
     dispose() {
       sceneLayers?.dispose();
       if (externalBed && bed) {

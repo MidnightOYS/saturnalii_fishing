@@ -148,6 +148,18 @@ export const definitions: Record<Mode, ModeDefinition> = {
   },
 };
 
+const expeditionRefraction: Preset = {
+  name: 'Лунный водосбор',
+  settings: {
+    ...definitions.refraction.presets[0].settings, deep: '#074467', shallow: '#79cdb7', feature: .28, layer: 1.63,
+  },
+};
+
+export function collectionPresets(mode: Mode, game = false): Preset[] {
+  const presets = definitions[mode].presets;
+  return game && mode === 'refraction' ? [expeditionRefraction, ...presets] : presets;
+}
+
 export const colorNames: Record<ColorKey, string> = {
   shallow: 'Мелководье', deep: 'Глубина', crest: 'Гребни', ink: 'Пигмент шторма', sun: 'Солнце', sky: 'Небо',
 };
@@ -179,15 +191,15 @@ export type CollectionSnapshot = {
   cameraElevation: number; autoWrath: boolean; paused: boolean;
 };
 
-export function defaultCollectionSettings(mode: Mode): LabSettings {
-  const preset = definitions[mode].presets[0].settings;
+export function defaultCollectionSettings(mode: Mode, game = false): LabSettings {
+  const preset = collectionPresets(mode, game)[0].settings;
   return { ...preset, ...(preset.effects && { effects: { ...preset.effects } }) };
 }
 
-export function defaultCollection(): CollectionSnapshot {
+export function defaultCollection(game = false): CollectionSnapshot {
   return {
     schema, version: 1, mode: 'refraction', cameraElevation: 32, autoWrath: false, paused: false,
-    modes: Object.fromEntries(modeKeys.map(mode => [mode, defaultCollectionSettings(mode)])) as Record<Mode, LabSettings>,
+    modes: Object.fromEntries(modeKeys.map(mode => [mode, defaultCollectionSettings(mode, game)])) as Record<Mode, LabSettings>,
   };
 }
 

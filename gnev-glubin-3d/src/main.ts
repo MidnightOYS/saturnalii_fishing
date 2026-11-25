@@ -58,7 +58,7 @@ const menu = byId<HTMLDialogElement>('menu');
 const waterInspector = byId('game-water-inspector');
 const waterSettingsToggle = byId<HTMLButtonElement>('water-settings-toggle');
 if (scene) {
-  let profile = defaultCollection();
+  let profile = defaultCollection(true);
   try {
     const saved = localStorage.getItem(waterSaveKey);
     if (saved) profile = readCollection(JSON.parse(saved), profile);
@@ -79,6 +79,9 @@ if (scene) {
 }
 const menuContent = byId('menu-content');
 const water = byId('fishing');
+const gameRoot = byId('game');
+const gameHeader = byId('game-header');
+const zoneIntro = byId('zone-intro');
 const hold = byId('hold');
 const cover = document.createElement('div');
 cover.className = 'hold-cover';
@@ -115,6 +118,8 @@ let mapNotice = '';
 let shopNotice = '';
 let inspectingHold = false;
 let lastPhaseLabel = '';
+let arrivalUntil = 0;
+let hasCast = false;
 let focusAfterDialog: HTMLElement | null = null;
 
 function save() {
@@ -136,6 +141,7 @@ function updateDock() {
 function showDock() {
   byId('dock').hidden = false;
   water.hidden = true;
+  delete gameRoot.dataset.expedition;
   updateDock();
 }
 
@@ -176,12 +182,14 @@ function showMenu(name: Menu) {
 }
 
 function closeMenu() {
-  if (currentMenu === 'result') game.result = null;
+  const fromResult = currentMenu === 'result';
+  if (fromResult) game.result = null;
   loadingLocation?.abort();
   loadingLocation = null;
   currentMenu = null;
   menu.close();
-  if (focusAfterDialog?.isConnected && !focusAfterDialog.closest('[hidden]')) focusAfterDialog.focus();
+  if (fromResult) byId('dock-boat').focus();
+  else if (focusAfterDialog?.isConnected && !focusAfterDialog.closest('[hidden]')) focusAfterDialog.focus();
   focusAfterDialog = null;
 }
 
@@ -268,6 +276,7 @@ function renderWater() {
   if (!run) return;
 
   const { phase } = run;
+  if (!zoneIntro.hidden && performance.now() >= arrivalUntil) zoneIntro.hidden = true;
   const stage = game.stage;
   water.dataset.stage = String(stage);
   setText(hud.stage, `${['I', 'II', 'III'][stage - 1]} · ${stages[stage - 1]}`);
@@ -313,34 +322,44 @@ function renderWater() {
   }
 
   const direction = counter[run.direction as keyof typeof counter];
-  const label = `${phase}|${phase === 'struggle' ? direction : ''}|${game.aiming}`;
+  const label = `${phase}|${phase === 'struggle' ? direction : ''}|${game.aiming}|${game.drawing}|${hasCast}`;
   if (label === lastPhaseLabel) return;
   lastPhaseLabel = label;
   hud.phase.dataset.phase = phase;
   hud.phase.dataset.counter = phase === 'struggle' ? direction : '';
   const descriptions: Record<string, string> = {
-    ready: '<strong>Забрось к рыбе</strong><span>Удерживай <kbd>ЛКМ</kbd>. Дальность растёт и падает. Отпусти, когда кольцо попадёт в рыбное место. Лодка · <kbd>WASD</kbd></span>',
-    cast: '<strong>Заброс</strong>',
-    wait: '<strong>Следи за поплавком</strong><span>Дождись поклёвки</span>',
-    hook: '<strong>Клюёт!</strong><button data-action="primary">Подсечь <kbd>Пробел</kbd></button><span>Нажми, когда риска войдёт в зелёную зону</span>',
+    ready: game.drawing
+      ? '<strong>Отпусти <kbd>ЛКМ</kbd>, когда кольцо попадёт в косяк</strong>'
+      : hasCast
+        ? '<span><kbd>ЛКМ</kbd> Заброс <kbd>WASD</kbd> Лодка</span>'
+        : '<strong>Забрось к рыбе</strong><span>Удерживай <kbd>ЛКМ</kbd> для выбора дальности. Лодка <kbd>WASD</kbd></span>',
+    cast: '<strong>Поплавок в полёте</strong>',
+    wait: '<span>Следи за поплавком</span>',
+    hook: '<button data-action="primary">Подсечь <kbd>Пробел</kbd></button><span>Нажми в зелёной зоне</span>',
     struggle: direction === 'left'
-      ? '<strong>Рывок вправо</strong><span>Тяни влево <kbd>A</kbd> / <kbd>←</kbd></span>'
-      : '<strong>Рывок влево</strong><span>Тяни вправо <kbd>D</kbd> / <kbd>→</kbd></span>',
-    reel: '<strong>Рыба устала</strong><span>Удерживай <kbd>Пробел</kbd>, чтобы подматывать</span>',
+      ? '<strong>Тяни влево</strong><span><kbd>A</kbd> / <kbd>←</kbd></span>'
+      : '<strong>Тяни вправо</strong><span><kbd>D</kbd> / <kbd>→</kbd></span>',
+    reel: '<strong>Подматывай</strong><span>Удерживай <kbd>Пробел</kbd></span>',
     pack: '<strong>Рыба поймана</strong>',
     surge: '<strong>Последняя волна</strong>'
   };
   hud.phase.innerHTML = game.aiming
-    ? '<strong>Лук в руках</strong><span>Наведи мышь на монстра. Удерживай ЛКМ для натяжения и отпусти, чтобы выстрелить.</span>'
+    ? '<strong>Лук в руках</strong><span>Удерживай <kbd>ЛКМ</kbd> для натяжения, отпусти для выстрела</span>'
     : descriptions[phase];
 }
 
 function renderHold(focus = false) {
   const run = game.run;
   const pending = run?.phase === 'pack' ? run.pending : null;
+  const previous = hold.contains(document.activeElement) && document.activeElement instanceof HTMLButtonElement
+    ? document.activeElement.dataset : null;
   hold.hidden = !run || game.aiming || (!pending && !inspectingHold);
   cover.hidden = hold.hidden;
-  if (hold.hidden || !run) return;
+  gameHeader.inert = water.inert = waterInspector.inert = !hold.hidden;
+  if (hold.hidden || !run) {
+    if (previous && run) water.focus({ preventScroll: true });
+    return;
+  }
 
   const { columns, rows } = run.grid;
   const cells = Array.from({ length: columns * rows }, (_, i) => {
@@ -368,7 +387,10 @@ function renderHold(focus = false) {
     ${pending ? `<div class="button-row"><button data-action="rotate">Повернуть <kbd>R</kbd></button>
       <button data-action="stack" ${stack ? '' : 'disabled'}>Сложить с такой же</button><button data-action="release">Выпустить рыбу</button></div>` : ''}
     <p id="hold-note" role="status"></p>`;
-  if (focus) hold.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
+  const buttons = [...hold.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')];
+  const replacement = previous && buttons.find(button => button.dataset.action === previous.action
+    && button.dataset.id === previous.id && button.dataset.x === previous.x && button.dataset.y === previous.y);
+  if (replacement || previous || focus) (replacement || buttons[0])?.focus();
 }
 
 function highlightCell(cell: HTMLElement | null) {
@@ -391,13 +413,21 @@ function highlightCell(cell: HTMLElement | null) {
 function processEvents() {
   for (const event of game.events.splice(0)) {
     switch (event.name) {
-      case 'start':
+      case 'start': {
+        const info = locationInfo[game.run!.zone.id as LocationSlot];
         byId('dock').hidden = true;
         water.hidden = false;
-        byId('zone-name').textContent = locationInfo[game.run!.zone.id as LocationSlot].name;
+        gameRoot.dataset.expedition = 'true';
+        byId('zone-name').textContent = info.name;
+        byId('zone-description').textContent = info.description;
+        zoneIntro.hidden = false;
+        arrivalUntil = performance.now() + 3600;
+        hasCast = false;
         lastPhaseLabel = '';
+        water.focus({ preventScroll: true });
         save();
         break;
+      }
       case 'catch':
         clearInputs();
         if (game.run) renderHold(true);
@@ -465,6 +495,7 @@ async function sail() {
 
 function action(button: HTMLButtonElement) {
   const { action, id } = button.dataset;
+  if (water.contains(button)) zoneIntro.hidden = true;
   switch (action) {
     case 'water-settings':
       toggleWaterInspector();
@@ -561,6 +592,16 @@ document.addEventListener('click', event => {
 hold.addEventListener('pointerover', event => highlightCell((event.target as HTMLElement).closest('.cell')));
 hold.addEventListener('pointerleave', () => highlightCell(null));
 hold.addEventListener('focusin', event => highlightCell((event.target as HTMLElement).closest('.cell')));
+hold.addEventListener('keydown', event => {
+  if (event.key !== 'Tab') return;
+  const buttons = hold.querySelectorAll<HTMLButtonElement>('button:not(:disabled)');
+  const first = buttons[0];
+  const last = buttons[buttons.length - 1];
+  if ((!event.shiftKey && event.target === last) || (event.shiftKey && event.target === first)) {
+    event.preventDefault();
+    (event.shiftKey ? last : first)?.focus();
+  }
+});
 
 menu.addEventListener('cancel', event => {
   event.preventDefault();
@@ -579,6 +620,9 @@ document.addEventListener('keydown', event => {
   }
   const run = game.run;
   if (!run || menu.open || event.altKey || event.ctrlKey || event.metaKey) return;
+  const focusedButton = event.target instanceof HTMLButtonElement ? event.target : null;
+  if (event.code === 'Space' && focusedButton && (hold.contains(focusedButton)
+    || focusedButton.dataset.action === 'primary' || (run.phase === 'ready' && focusedButton.matches(':focus-visible')))) return;
   const input = inputKeys[event.code];
   const bowKey = event.code === 'KeyF';
   const helm = helmKeys[event.code];
@@ -587,6 +631,7 @@ document.addEventListener('keydown', event => {
   const escape = event.code === 'Escape';
   if (!input && !helm && !bowKey && !offering && !rotate && !escape) return;
   if (input && !hold.hidden) return;
+  zoneIntro.hidden = true;
   event.preventDefault();
   if (event.repeat) return;
 
@@ -627,6 +672,8 @@ sceneHost.addEventListener('pointerdown', event => {
   if (event.button !== 0 || !scene || menu.open || !hold.hidden || drawPointer !== null) return;
   if (!(game.aiming ? game.beginDraw() : game.beginCast())) return;
   event.preventDefault();
+  zoneIntro.hidden = true;
+  water.focus({ preventScroll: true });
   drawPointer = event.pointerId;
   pointer = event;
   game.target = scene.pointAt(event.clientX, event.clientY, game.aiming);
@@ -642,7 +689,10 @@ sceneHost.addEventListener('pointerup', event => {
   drawPointer = null;
   game.target = scene?.pointAt(event.clientX, event.clientY, game.aiming) ?? null;
   if (game.aiming) game.releaseArrow();
-  else game.releaseCast();
+  else {
+    hasCast = true;
+    game.releaseCast();
+  }
   processEvents();
   renderWater();
 });

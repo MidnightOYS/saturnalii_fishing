@@ -89,7 +89,7 @@ void main() {
   float cb = texture2D(tDetail, bottom.yx * .14 + vec2(-.024, .018) * uTime).r;
   float net = pow(max(0.0, ca * .73 + cb * .50 - .20), 3.5);
   float causticDepth = 1.0 - smoothstep(1.8, 7.1, depth);
-  seabed += uSunColor * net * uCaustics * causticDepth * (1.0 - uStorm * .88) * .40;
+  seabed += uSunColor * net * uCaustics * causticDepth * (1.0 - uStorm * .88) * .40 * uCausticGain;
   seabed *= 1.0 - boatShadow(w, depth);
   float readable = clamp(uClarity * (1.0 - uStorm * .83), .12, 3.4);
   vec3 transmission = exp(-vec3(.61, .37, .31) * path / readable);

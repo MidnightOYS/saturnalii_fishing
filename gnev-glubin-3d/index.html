@@ -11,7 +11,7 @@
   <main id="game">
     <div id="scene" aria-hidden="true"></div>
     <div class="vignette" aria-hidden="true"></div>
-    <header class="top">
+    <header id="game-header" class="top">
       <div class="wordmark"><span class="sigil" aria-hidden="true">♆</span><strong>Гнев глубин</strong></div>
       <div class="status">
         <button id="water-settings-toggle" type="button" data-action="water-settings" aria-controls="game-water-inspector" aria-expanded="false">Вода</button>
@@ -26,16 +26,19 @@
       <button id="dock-boat" class="hotspot" data-action="map"><span aria-hidden="true"></span> Лодка</button>
     </section>
 
-    <section id="fishing" aria-labelledby="zone-name" hidden>
-      <div class="place fishing-place">
-        <span id="stage" class="eyebrow"></span><h1 id="zone-name"></h1>
+    <section id="fishing" aria-labelledby="zone-name" tabindex="-1" hidden>
+      <div class="fishing-status">
         <div class="readouts">
-          <div><label for="wrath">Гнев <span id="wrath-number"></span></label><progress id="wrath" max="100" value="0"></progress></div>
-          <div><span>Квота</span><strong id="quota"></strong></div>
+          <div class="wrath-status"><label for="wrath">Гнев <span id="wrath-number"></span></label><progress id="wrath" max="100" value="0"></progress><span id="stage"></span></div>
           <div><span>Здоровье</span><strong id="health"></strong></div>
+          <div><span>Квота</span><strong id="quota"></strong></div>
+        </div>
+        <div id="zone-intro" class="zone-intro" hidden>
+          <h1 id="zone-name"></h1>
+          <p id="zone-description"></p>
         </div>
       </div>
-      <div class="water-actions">
+      <div class="water-actions" role="group" aria-label="Действия на воде">
         <button id="bow-button" data-action="bow" aria-pressed="false">Лук <kbd>F</kbd></button>
         <button data-action="hold">Трюм</button>
         <button data-action="offering">Подношение <span id="offerings"></span> <kbd>O</kbd></button>
@@ -60,7 +63,7 @@
       <div id="game-water-controls"></div>
     </aside>
     <dialog id="menu" aria-labelledby="menu-title"><div id="menu-content"></div></dialog>
-    <section id="hold" aria-labelledby="hold-title" hidden></section>
+    <section id="hold" role="dialog" aria-modal="true" aria-labelledby="hold-title" hidden></section>
     <p id="render-error" role="status" hidden>3D-сцена недоступна. Для её показа нужен WebGL.</p>
   </main>
   <script type="module" src="./src/main.ts"></script>

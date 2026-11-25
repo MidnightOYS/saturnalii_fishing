@@ -8,6 +8,10 @@ export function createLabUniforms() {
     uDeep: { value: new T.Color('#075366') }, uShallow: { value: new T.Color('#72bfae') },
     uSun: { value: new T.Vector3(-.43, .64, -.78).normalize() },
     uEye: { value: new T.Vector3(15, 15, 20).normalize() }, uSunColor: { value: new T.Color('#ffe4ae') },
+    uGameWater: { value: 0 }, uSceneSky: { value: new T.Color('#aac4c1') },
+    uSceneFog: { value: 0 }, uSceneSun: { value: 1 }, uSceneFoam: { value: 1 },
+    uSceneLampGain: { value: 1 },
+    uSceneLamps: { value: Array.from({ length: 4 }, () => new T.Vector4()) },
     uCast: { value: new T.Vector4(1000,1000,-100,0) }, uWake: { value: null as T.Texture | null },
     uWakeOn: { value: 0 }, uShoreMap: { value: null as T.Texture | null }, uHull: { value: new T.Vector4() }, uWorldRect: { value: worldRect },
     uLabMirror: { value: null as T.Texture | null }, uMirrorVP: { value: new T.Matrix4() },
@@ -52,8 +56,28 @@ void main(){
 export const labFragmentHeader = declarations+labWaveFunctions+`
 uniform sampler2D uWake,uLabMirror,uShoreMap;
 uniform mat4 uMirrorVP;
-uniform float uWakeOn;
-uniform vec4 uCast,uWorldRect,uHull;
+uniform float uWakeOn,uGameWater,uSceneFog,uSceneSun,uSceneFoam,uSceneLampGain;
+uniform vec3 uSceneSky;
+uniform vec4 uCast,uWorldRect,uHull,uSceneLamps[4];
+vec3 sceneSkyRadiance(vec3 ray) {
+  float zenith = smoothstep(.02, .88, ray.y);
+  return uSceneSky * mix(vec3(.95, .98, 1.02), vec3(.26, .45, .62), zenith);
+}
+vec3 sceneLampGlints(vec3 normal) {
+  vec3 color = vec3(0.);
+  vec2 axis = normalize(uEye.xz + vec2(.001));
+  for (int i = 0; i < 4; i++) {
+    vec4 lamp = uSceneLamps[i];
+    if (lamp.w <= 0.) continue;
+    vec2 delta = vWorld.xz - lamp.xz - axis * .75;
+    float along = dot(delta, axis), across = dot(delta, vec2(axis.y, -axis.x));
+    float pool = exp(-.31 * along * along - 1.5 * across * across);
+    vec3 halfLamp = normalize(uEye + normalize(lamp.xyz - vWorld));
+    float glint = pow(max(0., dot(normal, halfLamp)), 17.);
+    color += vec3(.58, .24, .062) * lamp.w * pool * (.072 + .46 * glint);
+  }
+  return color;
+}
 vec3 labFinish(vec3 col){
   vec3 n=normalize(vNormal);
   vec4 refl=uMirrorVP*vec4(vWorld.x+n.x*.68,0.,vWorld.z+n.z*.68,1.);
@@ -63,11 +87,17 @@ vec3 labFinish(vec3 col){
   float fres=pow(1.-clamp(dot(n,uEye),0.,1.),4.);
   col=mix(col,mirrored.rgb/max(mirrored.a,.01),(.16+.55*fres)*mirrored.a*smoothstep(0.,.03,min(edge.x,edge.y)));
   vec2 uv=(vWorld.xz-uWorldRect.xy)/uWorldRect.zw;
-  float shore=texture2D(uShoreMap,clamp(uv,0.,1.)).r*7.-1.;
+  vec2 coast=texture2D(uShoreMap,clamp(uv,0.,1.)).rg;
+  float shore=coast.r*7.-1.;
   float curl=.13*sin(vWorld.x*3.3+vWorld.z*2.4-uTime*1.3)+.1*sin(vWorld.z*6.1+uTime);
   float swash=1.-smoothstep(.035,.19+.15*uWrath,abs(shore-.13-.13*sin(uTime*1.2)+curl));
   float fleck=smoothstep(-.45,.74,sin(vWorld.z*20.+vWorld.x*8.3)+sin(vWorld.x*13.4+uTime));
-  col=mix(col,vec3(.61,.75,.68),swash*(.15+.29*fleck));
+  float foamStripe = swash;
+  if (uGameWater > .5) {
+    float shelf = 1. - smoothstep(.035, .19, coast.g);
+    foamStripe = shelf * uSceneFoam * (1. - smoothstep(.06, .28, abs(shore - .12 - curl)));
+  }
+  col=mix(col,vec3(.61,.75,.68),foamStripe*(.15+.29*fleck));
   vec2 rel=vWorld.xz-uHull.xy;
   vec2 local=vec2(dot(rel,uHull.zw),dot(rel,vec2(-uHull.w,uHull.z)));
   float contact=exp(-dot(local/vec2(1.72,.65),local/vec2(1.72,.65)));
@@ -78,5 +108,11 @@ vec3 labFinish(vec3 col){
   float d=distance(vWorld.xz,uCast.xy);
   float ring=exp(-pow((d-age*1.55)*9.,2.))+.5*exp(-pow((d-age*1.55+.28)*11.,2.));
   if(age>=0.&&age<2.)col+=vec3(.36,.59,.52)*ring*(1.-smoothstep(.35,2.,age))*uCast.w;
-  return mix(col,vec3(.78,.87,.82),min(.88,foam*grain));
+  col = mix(col,vec3(.78,.87,.82),min(.88,foam*grain));
+  if (uGameWater > .5) {
+    col += sceneLampGlints(n) * uSceneLampGain;
+    float fogDepth = -(viewMatrix * vec4(vWorld, 1.)).z * uSceneFog;
+    col = mix(col, uSceneSky, 1. - exp(-fogDepth * fogDepth));
+  }
+  return col;
 }`;
