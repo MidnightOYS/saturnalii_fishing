@@ -1,5 +1,10 @@
 import * as T from 'three';
-import { between, bounds, distance, obstaclesFor, schoolRadius, waterCamera, type Expedition, type Point } from './expedition';
+import { between, distance, schoolRadius, waterCamera, type Expedition, type Point } from './expedition';
+import { disposeLocation, type LoadedLocation } from './location-assets';
+import { createLocationEffects } from './location-environment';
+import { createGameWater } from './location-water';
+import type { CollectionCamera } from './water-lab/collection';
+import { defaultCollectionSettings, type LabSettings, type Mode } from './water-lab/collection-settings';
 
 const waves = [
   { x: 0.91, z: 0.59, speed: 1.52, weight: 0.54 },
@@ -45,14 +50,6 @@ function stone(group: T.Object3D, color: T.ColorRepresentation, x: number, y: nu
   result.scale.set(w, h, depth);
   result.rotation.y = x * .69;
   return result;
-}
-
-function column(group: T.Object3D, x: number, z: number, height: number) {
-  box(group, '#b6ae91', x, .12, z, 1.23, .50, 1.23);
-  for (let y = .55; y < height; y += .55) {
-    cylinder(group, y % 1.1 < .55 ? '#c1b59a' : '#a39e88', x, y, z, .46 - y * .018, .56, 10);
-  }
-  if (height > 3) box(group, '#c7baa0', x, height, z, 1.11, .27, 1.1);
 }
 
 function lantern(group: T.Object3D, x: number, y: number, z: number) {
@@ -219,50 +216,6 @@ function sampleFlight(out: T.Vector3, start: T.Vector3, end: T.Vector3, lift: nu
   return out;
 }
 
-function expeditionTerrain(zone: string) {
-  const group = new T.Group();
-  for (let i = 0; i < 12; i += 1) {
-    const z = bounds.near - 4.15 * i;
-    const y = -.68 + Math.sin(i * 5.7) * .35;
-    for (const x of [bounds.left - 2.0, bounds.right + 2.0]) {
-      stone(group, '#576f63', x, y, z, 2.72, 1.18 + .16 * (i % 4), 3.15);
-    }
-  }
-  for (let i = 0; i < 11; i += 1) {
-    const x = bounds.left + i * 4;
-    stone(group, '#6b7264', x, -.42, bounds.far - 2, 3.1, 1.74, 2.5);
-  }
-  for (const item of obstaclesFor(zone)) {
-    const { x, z, radius: r } = item;
-    if (item.kind !== 'wreck') {
-      stone(group, '#727568', x, -.4, z, r * 1.14, 1.25, r * 1.10);
-      stone(group, '#657867', x + r * .2, .09, z + .19, r * .72, 1.32, r * .66);
-      for (let i = 0; i < 4; i += 1) {
-        const angle = i * 1.57 + item.angle;
-        const sx = x + Math.cos(angle) * r * .63;
-        const sz = z + Math.sin(angle) * r * .63;
-        if (item.kind === 'ruins') column(group, sx, sz, 1.9 + (i % 3) * .7);
-        else stone(group, '#898a67', sx, .44, sz, .88, .95 + i * .13, .82);
-      }
-      if (item.kind === 'ruins') box(group, '#a2a18e', x, .57, z, r, .7, r * .8);
-      continue;
-    }
-    const wreck = new T.Group();
-    wreck.position.set(x, .18, z);
-    wreck.rotation.y = item.angle;
-    const hull = createBoat().boat;
-    hull.scale.set(1.95, 1.5, 1.28);
-    hull.rotation.z = .42;
-    wreck.add(hull);
-    const mast = cylinder(wreck, '#806746', .1, .62, -.08, .095, 4.2);
-    mast.rotation.z = .85;
-    const sail = box(wreck, '#80796a', .9, .68, -.06, 1.7, .51, .06);
-    sail.rotation.z = -.58;
-    group.add(wreck);
-  }
-  return group;
-}
-
 function createMonster(scene: T.Scene) {
   const creature = new T.Group();
   const upper = new T.Group();
@@ -297,16 +250,16 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
   const dockCamera = new T.PerspectiveCamera(44, 1, .05, 150);
   const expeditionCamera = new T.OrthographicCamera(-20, 20, 11, -11, .05, 150);
   const fishingCamera = new T.PerspectiveCamera(64, 1, .07, 150);
-  let camera: T.Camera = dockCamera;
+  let camera: CollectionCamera = dockCamera;
   const sun = new T.DirectionalLight('#ffe0a8', 2.3);
   sun.position.set(-15, 14, -5);
-  scene.add(sun, new T.HemisphereLight('#e0e1c8', '#4f6c64', 1.65));
+  const sunDirection = sun.position.clone().normalize();
+  const ambient = new T.HemisphereLight('#e0e1c8', '#4f6c64', 1.65);
+  scene.add(sun, ambient);
 
   const { water, uniforms } = waterSurface();
   const { dock, stall } = createDock();
   const { horizon, harbor } = createTerrain();
-  const pond = expeditionTerrain('pond');
-  const temple = expeditionTerrain('temple');
   const { boat, skin } = createBoat();
   const fisher = new T.Group();
   mesh(fisher, new T.CapsuleGeometry(.23, .50, 3, 8), '#8f5f43', 0, .85, .36);
@@ -372,7 +325,6 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
   const head = mesh(feather, new T.ConeGeometry(.088, .23, 5), '#f7e3b4', 0, 0, .45);
   head.rotation.x = Math.PI / 2;
   const splash = ring('#e3b77e', .7);
-  const wake = ring('#9abfb1', 1.2);
   const spray = ring('#dfded1', .8);
   const weapon = new T.Group();
   const limbs = new T.CatmullRomCurve3([
@@ -383,8 +335,8 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
   const stringPositions = new T.BufferAttribute(new Float32Array(9), 3);
   weapon.add(new T.Line(new T.BufferGeometry().setAttribute('position', stringPositions),
     new T.LineBasicMaterial({ color: '#ead5a8' })));
-  scene.add(horizon, harbor, pond, temple, water, dock, boat, float, line, floatRipple,
-    ...spots, spray, weapon, feather, aimLine, crosshair, splash, wake);
+  scene.add(horizon, harbor, water, dock, boat, float, line, floatRipple,
+    ...spots, spray, weapon, feather, aimLine, crosshair, splash);
 
   const pick = new T.Raycaster();
   const bowAimLevel = .63;
@@ -418,7 +370,61 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
 
   let time = 0;
   let visualStage = 0;
-  let lastZone = '';
+  let waterMode: Mode = 'refraction';
+  let waterSettings = defaultCollectionSettings(waterMode);
+  let previousPhase = '';
+  let rippledMiss: Expedition['missedCast'] = null;
+  let rippledImpact: Expedition['impact'] = null;
+  let activeLocation: {
+    root: T.Group;
+    effects: ReturnType<typeof createLocationEffects>;
+    water: ReturnType<typeof createGameWater>;
+    cameraOffset: T.Vector3;
+    targetOffset: T.Vector3;
+  } | null = null;
+
+  function clearLocation() {
+    if (!activeLocation) return;
+    activeLocation.water.dispose();
+    activeLocation.effects.dispose();
+    disposeLocation(activeLocation.root);
+    activeLocation = null;
+  }
+
+  function setLocation({ root, layout }: LoadedLocation) {
+    clearLocation();
+    root.traverse(object => {
+      if (object.name.endsWith('_Foliage')) object.userData.refractiveFoliage = true;
+    });
+    const { anchors_xyz: anchors } = layout;
+    const cameraAnchor = layout.proposed_three_slot === 'pond' ? 'camera_pond' : 'camera_harbor';
+    const position = anchors[cameraAnchor];
+    const target = anchors[cameraAnchor + '_target'];
+    const spawn = new T.Vector3(...anchors.boat_spawn);
+    const cameraOffset = position ? new T.Vector3(...position).sub(spawn) : new T.Vector3(waterCamera.x, waterCamera.y, waterCamera.z);
+    const targetOffset = target ? new T.Vector3(...target).sub(spawn) : new T.Vector3(0, 0, -1.25);
+    const effects = createLocationEffects(layout);
+    try {
+      const locationWater = createGameWater(renderer, scene, layout, effects.lamps);
+      try {
+        locationWater.select(waterMode, waterSettings);
+      } catch (error) {
+        locationWater.dispose();
+        throw error;
+      }
+      activeLocation = { root, effects, water: locationWater, cameraOffset, targetOffset };
+      scene.add(root, effects.group);
+    } catch (error) {
+      effects.dispose();
+      throw error;
+    }
+  }
+
+  function selectWater(mode: Mode, settings: LabSettings) {
+    activeLocation?.water.select(mode, settings);
+    waterMode = mode;
+    waterSettings = settings;
+  }
   const fixedCamera = new T.Vector3(9.8, 7.7, 12.6);
   const harborLook = new T.Vector3(-.4, .1, -2.2);
   const look = new T.Vector3();
@@ -453,13 +459,12 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
   function update(dt: number) {
     time += dt;
     const run = game.run;
-    const zone = run?.zone.id ?? 'dock';
     const atDock = !run;
-    const inTemple = zone === 'temple';
     const firstPerson = game.firstPerson && !game.aiming;
-    const changedZone = zone !== lastZone;
-    if (changedZone && atDock) visualStage = 0;
-    lastZone = zone;
+    if (atDock) {
+      visualStage = 0;
+      clearLocation();
+    }
 
     const desiredStage = run ? game.stage - 1 : 0;
     const stageDelta = desiredStage - visualStage;
@@ -469,7 +474,6 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
     const a = palettes[low];
     const b = palettes[Math.min(low + 1, 2)];
     const amplitude = T.MathUtils.lerp(a.amplitude, b.amplitude, blend);
-    const surface = (x: number, z: number) => heightAt(x, z, time, amplitude);
     uniforms.uTime.value = time;
     uniforms.uAmplitude.value = amplitude;
     uniforms.uFog.value = T.MathUtils.lerp(a.fog, b.fog, blend);
@@ -482,14 +486,32 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
     fog.density = uniforms.uFog.value;
     sun.intensity = T.MathUtils.lerp(a.sun, b.sun, blend);
 
+    ambient.intensity = atDock ? 1.65 : T.MathUtils.lerp(1.65, .68, visualStage / 2);
     dock.visible = harbor.visible = horizon.visible = atDock;
-    pond.visible = !atDock && !inTemple;
-    temple.visible = inTemple;
+    water.visible = atDock;
     const bx = run ? game.position.x : 1.58;
     const bz = run ? game.position.z : .8;
     const heading = run ? game.heading : -.24;
     const dx = Math.sin(heading);
     const dz = Math.cos(heading);
+    const monster = run ? game.monster : null;
+    const monsterHeading = monster ? Math.atan2(bx - monster.x, bz - monster.z) : 0;
+    const locationWater = activeLocation?.water;
+    camera = atDock ? dockCamera : firstPerson ? fishingCamera : expeditionCamera;
+    if (run && locationWater) {
+      locationWater.update(time, T.MathUtils.clamp(run.wrath / 100, 0, 1), {
+        camera, hull: { x: bx, z: bz, heading },
+        sky: fog.color, fog: fog.density, sunDirection, sunColor: sun.color, sunPower: sun.intensity,
+        surge: run.phase === 'surge' ? T.MathUtils.clamp(run.age / game.balance.wrath.finalPause, 0, 1) : -1,
+        threat: monster ? {
+          x: monster.x, z: monster.z, strength: Math.min(1, monster.age / .78), heading: monsterHeading
+        } : undefined
+      });
+      locationWater.emitWake({ x: bx + dx * 1.9, z: bz + dz * 1.9 }, game.velocity);
+    }
+    const surface = locationWater
+      ? (x: number, z: number) => locationWater.heightAt(x, z)
+      : (x: number, z: number) => heightAt(x, z, time, amplitude);
     boat.position.set(bx, .12 + surface(bx, bz), bz);
     boat.rotation.set(
       Math.atan2(surface(bx - dx * 1.3, bz - dz * 1.3) - surface(bx + dx * 1.3, bz + dz * 1.3), 2.6),
@@ -497,15 +519,10 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
       Math.atan2(surface(bx + dz * .65, bz - dx * .65) - surface(bx - dz * .65, bz + dx * .65), 1.3),
       'YXZ'
     );
-    wake.visible = Boolean(run && Math.hypot(game.velocity.x, game.velocity.z) > .45);
-    wake.position.set(bx + dx * 1.9, surface(bx + dx * 1.9, bz + dz * 1.9) + .10, bz + dz * 1.9);
-    wake.scale.setScalar(1 + (time * 1.9 % 1) * .4);
-    wake.material.opacity = .48 * (1 - time * 1.9 % 1);
-    const monster = run ? game.monster : null;
     creature.visible = Boolean(monster);
     if (monster) {
       creature.position.set(monster.x, surface(monster.x, monster.z) + .09, monster.z);
-      creature.rotation.y = Math.atan2(bx - monster.x, bz - monster.z);
+      creature.rotation.y = monsterHeading;
       upper.position.y = Math.min(0, (monster.age - .78) * 1.8) + Math.sin(time * 12) * .09;
       upper.rotation.z = Math.sin(time * 8) * .11;
       warning.material.color.set(monster.windup > 0 ? '#ffdaa0' : '#ff8059');
@@ -528,21 +545,31 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
     const castRange = game.castPoint ? distance(game.position, game.castPoint) : 0;
     const fighting = run?.phase === 'struggle' || run?.phase === 'reel';
     const lookRange = fighting ? run!.distance : castRange;
-    camera = atDock ? dockCamera : firstPerson ? fishingCamera : expeditionCamera;
     if (atDock) {
       camera.position.copy(fixedCamera);
       camera.lookAt(harborLook);
     } else if (firstPerson) {
       const lookAhead = T.MathUtils.clamp(lookRange, 2.1, 7);
       fishingCamera.position.set(bx + dx * .55, 1.47 + (boat.position.y - .12) * .65, bz + dz * .55);
-      look.set(bx - dx * lookAhead, .22, bz - dz * lookAhead);
+      if (game.castPoint && castRange > 0) {
+        const facingCast = between(game.position, game.castPoint, lookAhead / castRange);
+        look.set(facingCast.x, .22, facingCast.z);
+      } else {
+        look.set(bx - dx * lookAhead, .22, bz - dz * lookAhead);
+      }
       fishingCamera.lookAt(look);
     } else {
-      look.set(bx, 0, bz - 1.25);
-      camera.position.set(look.x + waterCamera.x, waterCamera.y, look.z + waterCamera.z);
+      if (activeLocation) {
+        camera.position.set(bx, 0, bz).add(activeLocation.cameraOffset);
+        look.set(bx, 0, bz).add(activeLocation.targetOffset);
+      } else {
+        look.set(bx, 0, bz - 1.25);
+        camera.position.set(look.x + waterCamera.x, waterCamera.y, look.z + waterCamera.z);
+      }
       camera.lookAt(look);
     }
     camera.updateMatrixWorld();
+    activeLocation?.effects.update(time, visualStage, surface);
 
     for (const [index, marker] of markers.entries()) {
       if (!atDock) break;
@@ -578,6 +605,16 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
     const cast = firstPerson || run?.phase === 'cast' ? run?.cast : null;
     const spot = game.castPoint;
     const missedCast = run ? game.missedCast : null;
+    if (spot && run && run.phase !== previousPhase) {
+      if (run.phase === 'wait') locationWater?.ripple(spot.x, spot.z, .9);
+      if (run.phase === 'hook') locationWater?.ripple(spot.x, spot.z, 1.2);
+    }
+    previousPhase = run?.phase ?? '';
+    if (missedCast && missedCast !== rippledMiss && missedCast.age >= game.balance.aim.flight) {
+      locationWater?.ripple(missedCast.end.x, missedCast.end.z, .7);
+      rippledMiss = missedCast;
+    }
+    if (!missedCast) rippledMiss = null;
     float.visible = line.visible = Boolean(cast && spot);
     floatRipple.visible = false;
     if (cast && spot && run) {
@@ -673,15 +710,22 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
     const impact = run ? game.impact : null;
     splash.visible = Boolean(impact);
     if (impact) {
+      if (impact !== rippledImpact) locationWater?.ripple(impact.x, impact.z, impact.hit ? 1.1 : .6);
       splash.position.set(impact.x, surface(impact.x, impact.z) + .16, impact.z);
       splash.material.color.set(impact.hit ? '#ffe2a5' : '#c4cfc1');
       splash.material.opacity = 1 - impact.age / .55;
       splash.scale.setScalar(.59 + impact.age * 4);
     }
+    rippledImpact = impact;
 
-    renderer.render(scene, camera);
+    if (locationWater) {
+      locationWater.renderPasses(camera);
+      locationWater.renderScene(camera);
+    } else {
+      renderer.render(scene, camera);
+    }
   }
 
   update(0);
-  return { update, pointAt };
+  return { update, pointAt, setLocation, clearLocation, selectWater };
 }

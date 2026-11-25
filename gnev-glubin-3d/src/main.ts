@@ -1,14 +1,22 @@
 import './style.css';
 import { counter, fish, zones } from './rules/game.js';
 import { Expedition } from './expedition';
+import { disposeLocation, loadLocation, type LoadedLocation } from './location-assets';
+import type { LocationSlot } from './location-navigation';
 import { createScene } from './scene';
+import { defaultCollection, readCollection } from './water-lab/collection-settings';
+import { makeLabUI } from './water-lab/collection-ui';
 
 const saveKey = 'gnev-glubin-3d.progress.v1';
+const waterSaveKey = 'gnev-glubin-3d.water.v1';
 type Meta = InstanceType<typeof Expedition>['meta'];
 type FishId = keyof typeof fish;
-type ZoneId = 'pond' | 'temple';
 type Input = 'left' | 'right' | 'reel';
 type Menu = 'map' | 'shop' | 'result' | 'exit';
+const locationInfo = {
+  pond: { name: 'Лунный водосбор', description: 'Тихая вода у каменной цистерны. Первый косяк у пристани.' },
+  temple: { name: 'Гавань затонувшего лика', description: 'Бронзовый лик под водой. Гнев растёт быстрее, редкий улов попадается чаще.' },
+} as const;
 
 function byId<T extends HTMLElement = HTMLElement>(id: string): T {
   return document.getElementById(id) as T;
@@ -47,6 +55,28 @@ try {
 }
 
 const menu = byId<HTMLDialogElement>('menu');
+const waterInspector = byId('game-water-inspector');
+const waterSettingsToggle = byId<HTMLButtonElement>('water-settings-toggle');
+if (scene) {
+  let profile = defaultCollection();
+  try {
+    const saved = localStorage.getItem(waterSaveKey);
+    if (saved) profile = readCollection(JSON.parse(saved), profile);
+  } catch {
+    // Use the collection defaults if settings cannot be read.
+  }
+  scene.selectWater(profile.mode, profile.modes[profile.mode]);
+  makeLabUI((mode, settings, snapshot) => {
+    scene?.selectWater(mode, settings);
+    try {
+      localStorage.setItem(waterSaveKey, JSON.stringify(snapshot));
+    } catch {
+      // Settings still apply to the current session.
+    }
+  }, undefined, { root: byId('game-water-controls'), initial: profile, game: true });
+} else {
+  waterSettingsToggle.disabled = true;
+}
 const menuContent = byId('menu-content');
 const water = byId('fishing');
 const hold = byId('hold');
@@ -79,7 +109,9 @@ let drawPointer: number | null = null;
 let pointer: { clientX: number; clientY: number } | null = null;
 const stages = ['Тихая вода', 'Знамение', 'Ярость'];
 let currentMenu: Menu | null = null;
-let selectedZone: ZoneId = 'pond';
+let selectedZone: LocationSlot = 'pond';
+let loadingLocation: AbortController | null = null;
+let mapNotice = '';
 let shopNotice = '';
 let inspectingHold = false;
 let lastPhaseLabel = '';
@@ -97,8 +129,8 @@ function updateDock() {
   byId('gold').textContent = String(game.meta.gold);
   byId('xp').textContent = String(game.meta.xp);
   byId('dock-goal').textContent = game.meta.boat
-    ? 'Лодка починена. Теперь можно выйти к Затопленному храму.'
-    : 'Выполни квоту в Запретном пруду. Продай улов и почини лодку, чтобы добраться до храма.';
+    ? 'Лодка починена. Теперь можно выйти в Гавань затонувшего лика.'
+    : 'Выполни квоту в Лунном водосборе. Продай улов и почини лодку, чтобы открыть Гавань затонувшего лика.';
 }
 
 function showDock() {
@@ -114,6 +146,16 @@ function clearInputs() {
   game.abortDraw();
   drawPointer = null;
   pointer = null;
+}
+
+function toggleWaterInspector() {
+  waterInspector.hidden = !waterInspector.hidden;
+  waterSettingsToggle.setAttribute('aria-expanded', String(!waterInspector.hidden));
+  if (waterInspector.hidden) waterSettingsToggle.focus();
+  else {
+    clearInputs();
+    waterInspector.querySelector('button')?.focus();
+  }
 }
 
 function toggleBow() {
@@ -135,6 +177,8 @@ function showMenu(name: Menu) {
 
 function closeMenu() {
   if (currentMenu === 'result') game.result = null;
+  loadingLocation?.abort();
+  loadingLocation = null;
   currentMenu = null;
   menu.close();
   if (focusAfterDialog?.isConnected && !focusAfterDialog.closest('[hidden]')) focusAfterDialog.focus();
@@ -157,20 +201,23 @@ function renderMenu() {
   if (currentMenu === 'map') {
     const locked = selectedZone === 'temple' && !game.meta.boat;
     const cards = zones.map(zone => {
-      const isLocked = zone.id === 'temple' && !game.meta.boat;
-      return `<button class="location" data-action="zone" data-id="${zone.id}" aria-pressed="${selectedZone === zone.id}">
-        <span class="eyebrow">${zone.number}</span><strong>${zone.name}</strong>
-        <small>${zone.description}</small>${isLocked ? '<p>Требуется ремонт лодки</p>' : ''}</button>`;
+      const id = zone.id as LocationSlot;
+      const info = locationInfo[id];
+      const isLocked = id === 'temple' && !game.meta.boat;
+      return `<button class="location" data-action="zone" data-id="${id}" aria-pressed="${selectedZone === id}" ${loadingLocation ? 'disabled' : ''}>
+        <span class="eyebrow">${zone.number}</span><strong>${info.name}</strong>
+        <small>${info.description}</small>${isLocked ? '<p>Требуется ремонт лодки</p>' : ''}</button>`;
     }).join('');
     menuContent.innerHTML = `${heading('Выбор места', 'Лодка')}<div class="locations">${cards}</div>
       <div class="button-row"><span>Подношения · ${game.meta.offerings}</span>
-      <button class="primary" data-action="sail" ${locked ? 'disabled' : ''}>Выйти на воду</button></div>`;
+      <button class="primary" data-action="sail" ${locked || loadingLocation || !scene ? 'disabled' : ''}>Выйти на воду</button></div>
+      <p class="map-notice" role="status">${loadingLocation ? 'Загружаем локацию…' : mapNotice}</p>`;
   } else if (currentMenu === 'shop') {
     const catchForSale = Object.entries(game.meta.sales) as [FishId, number][];
     const value = catchForSale.reduce((sum, [id, amount]) => sum + price(id) * amount, 0);
     const catchNames = catchForSale.map(([id, count]) => `${fish[id].name} × ${count}`).join(' · ');
     const upgrades = [
-      { id: 'boat', name: 'Ремонт лодки', effect: 'Открывает Затопленный храм.' },
+      { id: 'boat', name: 'Ремонт лодки', effect: 'Открывает Гавань затонувшего лика.' },
       { id: 'line', name: 'Крепкая леска', effect: 'Натяжение нарастает медленнее.' },
       { id: 'offering', name: 'Подношение', effect: 'Снижает гнев до стадии Ярости.' }
     ] as const;
@@ -194,7 +241,7 @@ function renderMenu() {
       health: 'Одиссей не смог продолжить. Улов и опыт вылазки потеряны.'
     };
     menuContent.innerHTML = `${heading(result.success ? 'Улов доставлен' : 'Вылазка сорвалась',
-      zones.find(zone => zone.id === result.zone)!.name, false)}
+      locationInfo[result.zone as LocationSlot].name, false)}
       <p class="panel-text">${result.success ? 'Улов можно продать в лавке на причале.' : details[result.reason]}</p>
       <div class="report"><span><strong>${result.count + Number(!result.success && result.lostPending)}</strong>${result.success ? 'Рыб доставлено' : 'Рыб потеряно'}</span>
       <span><strong>${result.score} / ${game.balance.economy.quota}</strong>Квота</span>
@@ -347,7 +394,7 @@ function processEvents() {
       case 'start':
         byId('dock').hidden = true;
         water.hidden = false;
-        byId('zone-name').textContent = game.run!.zone.name;
+        byId('zone-name').textContent = locationInfo[game.run!.zone.id as LocationSlot].name;
         lastPhaseLabel = '';
         save();
         break;
@@ -380,23 +427,64 @@ function processEvents() {
   }
 }
 
+async function sail() {
+  if (!scene || loadingLocation || (selectedZone === 'temple' && !game.meta.boat)) return;
+  const request = new AbortController();
+  const zone = selectedZone;
+  loadingLocation = request;
+  mapNotice = '';
+  renderMenu();
+  let unattached: LoadedLocation | undefined;
+  let attached = false;
+  try {
+    unattached = await loadLocation(zone, request.signal);
+    if (loadingLocation !== request) return;
+    const { layout } = unattached;
+    scene.setLocation(unattached);
+    unattached = undefined;
+    attached = true;
+    if (!game.start(zone, layout)) throw new Error(`Could not start expedition: ${zone}`);
+  } catch (error) {
+    if (attached) scene.clearLocation();
+    if (request.signal.aborted) return;
+    mapNotice = 'Локация не загрузилась. Попробуй выйти на воду ещё раз.';
+    console.warn('Location could not be loaded', error);
+    return;
+  } finally {
+    if (unattached) disposeLocation(unattached.root);
+    if (loadingLocation === request) {
+      loadingLocation = null;
+      request.abort();
+      if (mapNotice) renderMenu();
+    }
+  }
+  closeMenu();
+  processEvents();
+  renderWater();
+}
+
 function action(button: HTMLButtonElement) {
   const { action, id } = button.dataset;
   switch (action) {
+    case 'water-settings':
+      toggleWaterInspector();
+      break;
     case 'shop':
       shopNotice = '';
       showMenu('shop');
       break;
     case 'map':
       selectedZone = 'pond';
+      mapNotice = '';
       showMenu('map');
       break;
     case 'zone':
       if (id === 'pond' || id === 'temple') selectedZone = id;
+      mapNotice = '';
       renderMenu();
       break;
     case 'sail':
-      if (game.start(selectedZone)) closeMenu();
+      void sail();
       break;
     case 'close-menu':
       closeMenu();
@@ -409,7 +497,7 @@ function action(button: HTMLButtonElement) {
       break;
     case 'buy':
       if (id && game.buy(id)) {
-        shopNotice = id === 'boat' ? 'Лодка готова. Затопленный храм открыт.' : 'Покупка сделана.';
+        shopNotice = id === 'boat' ? 'Лодка готова. Гавань затонувшего лика открыта.' : 'Покупка сделана.';
         save();
         updateDock();
         renderMenu();
@@ -485,6 +573,10 @@ function syncKeys() {
 }
 
 document.addEventListener('keydown', event => {
+  if (event.target instanceof Node && waterInspector.contains(event.target)) {
+    if (event.code === 'Escape') toggleWaterInspector();
+    return;
+  }
   const run = game.run;
   if (!run || menu.open || event.altKey || event.ctrlKey || event.metaKey) return;
   const input = inputKeys[event.code];

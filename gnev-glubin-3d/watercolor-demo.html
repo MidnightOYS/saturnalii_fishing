@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#142d30">
+  <title>Гнев глубин · Акварельная бухта</title>
+</head>
+<body>
+  <main id="bay" aria-label="Акварельная бухта с лодкой"></main>
+  <header class="title">
+    <p>Гнев глубин</p>
+    <h1>Акварельная<br>бухта</h1>
+    <div class="title-mark" aria-hidden="true"></div>
+  </header>
+
+  <section class="mission" aria-label="Вылазка">
+    <div class="wrath-head"><span>Гнев</span><output id="wrath-value">0%</output></div>
+    <meter id="wrath-meter" min="0" max="100" high="65" optimum="0" value="0" aria-label="Гнев Посейдона"></meter>
+    <p id="stage">Штиль</p>
+    <p class="run-stats"><span id="cargo">Улов 0 / 2</span><span id="health">Здоровье 3 / 3</span></p>
+    <p id="game-status" role="status">Лодка готовится к выходу…</p>
+    <div id="hook-meter" class="hook-meter" hidden role="img" aria-label="Окно подсечки">
+      <i id="hook-window"></i><b id="hook-marker"></b>
+    </div>
+    <div class="game-actions">
+      <button id="cast" type="button">Забросить <kbd>Space</kbd></button>
+      <button id="offer" type="button">Подношение <span>1</span></button>
+      <button id="retreat" type="button">К пристани</button>
+      <button id="repel" type="button" hidden>Отпугнуть <kbd>F</kbd></button>
+      <button id="release" type="button" hidden>Выпустить</button>
+    </div>
+    <div class="touch-steering" aria-label="Движение лодки">
+      <button data-steer="KeyA" aria-label="Влево">←</button>
+      <button data-steer="KeyW" aria-label="Вперёд">↑</button>
+      <button data-steer="KeyS" aria-label="Назад">↓</button>
+      <button data-steer="KeyD" aria-label="Вправо">→</button>
+    </div>
+    <p class="keys"><kbd>WASD</kbd> лодка <span>·</span> <kbd>O</kbd> подношение</p>
+  </section>
+
+  <details class="inspector" id="inspector" open>
+    <summary>Инспектор</summary>
+    <div class="inspector-body">
+      <label class="select">Палитра<select id="preset"></select></label>
+      <div class="swatches" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      <div class="inspector-section">
+        <label class="toggle"><span>Гнев растёт в игре</span><input id="auto-wrath" type="checkbox" checked></label>
+        <label class="range"><span>Предпросмотр гнева</span><output id="preview-value" for="preview-wrath">0%</output>
+          <input id="preview-wrath" type="range" min="0" max="100" step="1" value="0"></label>
+        <div class="stage-buttons" aria-label="Предпросмотр стадий гнева">
+          <button data-wrath="0" type="button">Штиль</button>
+          <button data-wrath="43" type="button">Знамение</button>
+          <button data-wrath="83" type="button">Ярость</button>
+        </div>
+      </div>
+      <details class="inspector-section" open>
+        <summary>Поверхность и дно</summary>
+        <div id="water-settings"></div>
+      </details>
+      <details class="inspector-section" open>
+        <summary>Акварель</summary>
+        <div id="paint-settings"></div>
+      </details>
+      <details class="inspector-section">
+        <summary>Сцена</summary>
+        <div id="scene-settings"></div>
+      </details>
+    </div>
+    <footer class="inspector-footer">
+      <button id="pause" type="button" aria-pressed="false">Стоп-кадр</button>
+      <button id="export" type="button">Экспорт JSON</button>
+      <output id="fps" aria-label="Частота кадров"></output>
+    </footer>
+  </details>
+
+  <script type="module" src="/src/watercolor-demo.ts"></script>
+</body>
+</html>

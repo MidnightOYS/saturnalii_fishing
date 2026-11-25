@@ -14,6 +14,7 @@
     <header class="top">
       <div class="wordmark"><span class="sigil" aria-hidden="true">♆</span><strong>Гнев глубин</strong></div>
       <div class="status">
+        <button id="water-settings-toggle" type="button" data-action="water-settings" aria-controls="game-water-inspector" aria-expanded="false">Вода</button>
         <span><span id="gold">0</span> др.</span>
         <span>Опыт <span id="xp">0</span></span>
       </div>
@@ -54,6 +55,10 @@
       </div>
     </section>
 
+    <aside id="game-water-inspector" aria-label="Настройки воды" hidden>
+      <button type="button" class="water-settings-close" data-action="water-settings" aria-label="Закрыть настройки воды">×</button>
+      <div id="game-water-controls"></div>
+    </aside>
     <dialog id="menu" aria-labelledby="menu-title"><div id="menu-content"></div></dialog>
     <section id="hold" aria-labelledby="hold-title" hidden></section>
     <p id="render-error" role="status" hidden>3D-сцена недоступна. Для её показа нужен WebGL.</p>

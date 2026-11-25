@@ -5,6 +5,7 @@ import { WaveField } from './waves';
 import { SpectralWaveField, spectralVertex } from './spectrum';
 import { LagoonWaveField, lagoonVertex } from './lagoon';
 import { spectralFragment, lagoonFragment } from './optics';
+import { fitLocationSurface, type LocationSurface } from './location-surface';
 
 export { poseBoat } from './waves';
 export type { Shore, WaterBounds, WaterPoint } from './fields';
@@ -88,6 +89,7 @@ type WaterOptions = {
   variant?: WaterVariant;
   /** A finite geometry apron hides the playable bounds at the viewport edge. */
   apron?: number;
+  locationSurface?: LocationSurface;
 };
 type ShoreLamp = { position: T.Vector3; strength: number };
 type SceneCamera = T.OrthographicCamera | T.PerspectiveCamera;
@@ -96,7 +98,7 @@ const qualityScale = { off: 0, balanced: .48, full: 1 };
 const maxRipples = 6;
 const rippleLifetime = 1.42;
 
-export function createWater({ bounds, shores = [], settings: overrides, variant: initialVariant = 'A', apron = 18 }: WaterOptions) {
+export function createWater({ bounds, shores = [], settings: overrides, variant: initialVariant = 'A', apron = 18, locationSurface }: WaterOptions) {
   const settings: WaterSettings = { ...waterVariants[initialVariant], ...overrides };
   const effects: WaterEffects = { ...waterEffects };
   const width = bounds.maxX - bounds.minX, depth = bounds.maxZ - bounds.minZ;
@@ -105,7 +107,7 @@ export function createWater({ bounds, shores = [], settings: overrides, variant:
   let variant: WaterVariant = 'A';
   let spectrum: SpectralWaveField | undefined;
   const wake = new WakeField(worldRect);
-  let coast = makeCoastAtlas(bounds, shores);
+  let coast = locationSurface?.map ?? makeCoastAtlas(bounds, shores);
   const lagoon = new LagoonWaveField(bounds, coast);
   const detail = makeWaterDetail();
   const rendererSize = new T.Vector2();
@@ -148,7 +150,9 @@ export function createWater({ bounds, shores = [], settings: overrides, variant:
     B: new T.ShaderMaterial({ name: 'GnevGlubinSpectrum', uniforms, vertexShader: spectralVertex, fragmentShader: spectralFragment }),
     C: new T.ShaderMaterial({ name: 'GnevGlubinLagoon', uniforms, vertexShader: lagoonVertex, fragmentShader: lagoonFragment }),
   };
+  for (const material of Object.values(materials)) fitLocationSurface(material, locationSurface, true);
   const mesh = new T.Mesh(geometry, materials.A);
+  if (locationSurface) mesh.renderOrder = -1;
   mesh.name = 'Water surface';
   mesh.position.set(bounds.minX + width * .5, 0, bounds.minZ + depth * .5);
   mesh.frustumCulled = false;
@@ -291,17 +295,17 @@ export function createWater({ bounds, shores = [], settings: overrides, variant:
     },
     setShore(next: readonly Shore[]) {
       const nextAtlas = makeCoastAtlas(bounds, next);
-      coast.dispose();
+      if (coast !== locationSurface?.map) coast.dispose();
       coast = uniforms.tCoast.value = nextAtlas;
       lagoon.setCoast(nextAtlas);
     },
     setLamps(next: readonly ShoreLamp[]) { lamps = next; },
-    emitWake(stern: WaterPoint, velocity: WaterPoint) {
-      if (effects.wake && settings.wake > 0) wake.emit(time, stern, velocity);
+    emitWake(stern: WaterPoint, velocity: WaterPoint, now = time) {
+      if (effects.wake && settings.wake > 0) wake.emit(now, stern, velocity);
     },
-    ripple(x: number, z: number, strength = 1) {
+    ripple(x: number, z: number, strength = 1, now = time) {
       if (ripples.length >= maxRipples) ripples.shift();
-      ripples.push({ x, z, time, strength: T.MathUtils.clamp(strength, 0, 1.5) });
+      ripples.push({ x, z, time: now, strength: T.MathUtils.clamp(strength, 0, 1.5) });
     },
     clearTransient() { ripples.length = 0; wake.clear(); },
     reflectionSize: () => ({ width: mirror.width, height: mirror.height }),
@@ -310,7 +314,7 @@ export function createWater({ bounds, shores = [], settings: overrides, variant:
       geometry.dispose();
       Object.values(materials).forEach(material => material.dispose());
       spectrum?.dispose();
-      coast.dispose();
+      if (coast !== locationSurface?.map) coast.dispose();
       detail.dispose();
       mirror.dispose();
       wake.dispose();

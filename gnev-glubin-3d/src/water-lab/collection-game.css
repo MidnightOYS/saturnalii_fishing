@@ -1,0 +1,18 @@
+:host { display: block; color: var(--ink); }
+.lab-collection.game-water-collection .lab-inspector[open] {
+  position: static;
+  width: 100%;
+  max-height: none;
+  overflow: visible;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+.game-water-collection .lab-panel { padding: 0; }
+.game-water-collection .lab-collection-nav {
+  width: 100%;
+  margin-bottom: 14px;
+  box-shadow: none;
+}
+.game-water-collection .lab-mode-row { grid-template-columns: 62px minmax(0, 1fr); }
+.game-water-collection .lab-collection-nav .lab-nav button { padding-inline: 6px; }

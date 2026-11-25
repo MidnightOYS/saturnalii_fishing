@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "check": "tsc --noEmit",
-    "build": "npm run check && vite build && vite build --mode water-demo && node scripts/standalone.mjs",
+    "build": "npm run check && vite build && npm run build:water && node scripts/standalone.mjs",
+    "build:water": "vite build --mode water-demo && vite build --mode watercolor-demo && vite build --mode water-lab && vite build --mode water-layers && vite build --mode water-collection",
     "preview": "vite preview"
   },
   "devDependencies": {

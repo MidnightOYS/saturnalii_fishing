@@ -1,52 +1,25 @@
 import { Pond } from './rules/game.js';
+import { LocationNavigation, worldHeading, worldPoint, type LocationLayout, type Point } from './location-navigation';
 
-export type Point = { x: number; z: number };
-type Obstacle = Point & { radius: number; kind: 'island' | 'wreck' | 'ruins'; angle: number };
+export type { Point } from './location-navigation';
 type School = Point & { id: number };
 type Monster = Point & { age: number; windup: number; steering: number };
 type Arrow = { start: Point; end: Point; age: number; travel: number };
 type MissedCast = { start: Point; end: Point; age: number };
 type Impact = Point & { hit: boolean; age: number };
 
-export const bounds = { left: -20, right: 20, near: 6, far: -41 };
 export const waterCamera = { x: 11, y: 19, z: 19 };
 export const schoolRadius = 1.15;
 const castReach = 10;
 const castMinimum = 2.2;
 const castChargeTime = 1.08;
 export const reach = 12;
-const schoolSites = [
-  { x: -2.9, z: -6.8 }, { x: 5.3, z: -3.7 }, { x: 1.5, z: -12.7 },
-  { x: -7.5, z: -13.3 }, { x: 9.8, z: -16.3 }, { x: -12.9, z: -10.6 },
-  { x: 2.5, z: -22.1 }, { x: -8.8, z: -28 }, { x: 7.8, z: -32.2 }, { x: -14, z: -31 }
-];
-const locations: Record<string, Obstacle[]> = {
-  pond: [
-    { x: -9, z: -7, radius: 3.7, kind: 'island', angle: .2 },
-    { x: 7.6, z: -10.3, radius: 3.1, kind: 'wreck', angle: -.9 },
-    { x: -3.9, z: -17, radius: 3.2, kind: 'island', angle: -.4 },
-    { x: 13.3, z: -23.6, radius: 4, kind: 'island', angle: .8 },
-    { x: -12.8, z: -24.8, radius: 3.1, kind: 'wreck', angle: .4 },
-    { x: .5, z: -30, radius: 4.6, kind: 'island', angle: .7 }
-  ],
-  temple: [
-    { x: -8, z: -9, radius: 3.8, kind: 'ruins', angle: .3 },
-    { x: 8.8, z: -8.6, radius: 3.8, kind: 'island', angle: .2 },
-    { x: 1.4, z: -16.5, radius: 4.6, kind: 'ruins', angle: .4 },
-    { x: -13.1, z: -22, radius: 3.4, kind: 'wreck', angle: .1 },
-    { x: 11.5, z: -22.5, radius: 3.4, kind: 'ruins', angle: -.2 },
-    { x: -2.7, z: -30.9, radius: 4.9, kind: 'ruins', angle: .8 }
-  ]
-};
+// The current game boat measures 4 × 1.88 m. Its ends taper into the capsule.
+const boatClearance = 1.10;
+const boatSpineHalfLength = 1.06;
 
-export const obstaclesFor = (zone: string) => locations[zone] ?? locations.pond;
 export const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.z - b.z);
 export const between = (a: Point, b: Point, t: number) => ({ x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t });
-
-function inside({ x, z }: Point, margin: number) {
-  return x >= bounds.left + margin && x <= bounds.right - margin
-    && z >= bounds.far + margin && z <= bounds.near - margin;
-}
 
 // First intersection along a segment, including contacts when the segment starts inside.
 function contact(a: Point, b: Point, center: Point, radius: number): number {
@@ -64,8 +37,10 @@ function contact(a: Point, b: Point, center: Point, radius: number): number {
   return t <= 1 ? t : Infinity;
 }
 
-function clear(a: Point, b: Point, obstacles: Obstacle[], margin: number) {
-  return inside(b, margin) && obstacles.every(item => contact(a, b, item, item.radius + margin) === Infinity);
+function hullSpine(position: Point, heading: number): [Point, Point] {
+  const x = Math.sin(heading) * boatSpineHalfLength;
+  const z = Math.cos(heading) * boatSpineHalfLength;
+  return [{ x: position.x - x, z: position.z - z }, { x: position.x + x, z: position.z + z }];
 }
 
 export class Expedition extends Pond {
@@ -88,10 +63,9 @@ export class Expedition extends Pond {
   private monsterTimer = 0;
   private schoolId = 1;
   private castChargeAge = 0;
-
-  get obstacles() {
-    return obstaclesFor(this.run?.zone.id ?? 'pond');
-  }
+  private returnPose: { position: Point; heading: number } | null = null;
+  private navigation: LocationNavigation | null = null;
+  private schoolSites: Point[] = [];
 
   override get firstPerson() {
     return Boolean(this.fishingSpot && this.run?.phase !== 'cast' && super.firstPerson);
@@ -107,7 +81,7 @@ export class Expedition extends Pond {
   get castPreview() {
     const point = this.chargedPoint(castMinimum, castReach);
     if (!point) return null;
-    const open = clear(this.position, point, this.obstacles, 0);
+    const open = this.navigation?.clear(this.position, point) ?? false;
     const school = open ? this.schools.reduce<School | null>((nearest, school) => {
       const range = distance(point, school);
       return range <= schoolRadius && (!nearest || range < distance(point, nearest)) ? school : nearest;
@@ -145,19 +119,56 @@ export class Expedition extends Pond {
     this.missedCast = null;
     this.castPoint = point;
     this.fishingSpot = school;
-    this.heading = Math.atan2(this.position.x - point.x, this.position.z - point.z);
+    this.turnBoatTowards(Math.atan2(this.position.x - point.x, this.position.z - point.z), 1);
     this.cast({ angle: 0, depth: .52 });
     if (this.run.cast) this.run.cast.hasBite = true;
     this.run.distance = distance(this.position, point);
   }
 
-  override start(id: string) {
+  override start(id: string, layout?: LocationLayout) {
+    if (!layout || layout.proposed_three_slot !== id) return false;
+    const navigation = new LocationNavigation(layout);
+    const pose = (anchor: 'boat_spawn' | 'boat_return') => ({
+      position: worldPoint(layout.anchors_xyz[anchor]),
+      heading: worldHeading(layout.anchor_heading_from_east_towards_south_rad[anchor]),
+    });
+    const spawn = pose('boat_spawn');
+    const returnPose = pose('boat_return');
+    const firstSchool = worldPoint(layout.first_fish_hint_xyz);
+    const spawnSpine = hullSpine(spawn.position, spawn.heading);
+    const returnSpine = hullSpine(returnPose.position, returnPose.heading);
+    const castRange = distance(spawn.position, firstSchool);
+    if (!navigation.clear(...spawnSpine, boatClearance) || !navigation.clear(...returnSpine, boatClearance)
+      || !(castRange >= castMinimum && castRange <= castReach) || !navigation.clear(spawn.position, firstSchool)) {
+      throw new Error(`Invalid boat or fishing anchors in ${layout.location}`);
+    }
+
+    const schoolSites: Point[] = [];
+    const { minX, maxX, minZ, maxZ } = layout.water_bounds;
+    if (![minX, maxX, minZ, maxZ].every(Number.isFinite) || minX >= maxX || minZ >= maxZ) {
+      throw new Error(`Invalid water bounds in ${layout.location}`);
+    }
+    const columns = 8;
+    const rows = 10;
+    for (let row = 0; row < rows; row += 1) {
+      for (let column = 0; column < columns; column += 1) {
+        const site = {
+          x: minX + (column + .5) / columns * (maxX - minX),
+          z: minZ + (row + .5) / rows * (maxZ - minZ),
+        };
+        if (navigation.clear(site, site, schoolRadius)) schoolSites.push(site);
+      }
+    }
     if (!super.start(id)) return false;
-    this.position = { x: 1, z: 0 };
-    this.heading = .45;
+    this.navigation = navigation;
+    this.returnPose = returnPose;
+    this.position = spawn.position;
+    this.heading = spawn.heading;
     this.helm.clear();
     this.velocity = { x: 0, z: 0 };
-    this.schools = [];
+    this.schoolId = 1;
+    this.schools = [{ ...firstSchool, id: this.schoolId++ }];
+    this.schoolSites = schoolSites;
     this.fishingSpot = null;
     this.castPoint = null;
     this.missedCast = null;
@@ -168,10 +179,21 @@ export class Expedition extends Pond {
     this.impact = null;
     this.schoolTimer = 7;
     this.monsterTimer = this.balance.wrath.firstAttack;
-    this.schoolId = 1;
-    for (const site of schoolSites.slice(0, 2)) this.schools.push({ ...site, id: this.schoolId++ });
+    this.replenishSchool();
     this.replenishSchool();
     return true;
+  }
+
+  override finish(reason = 'return') {
+    super.finish(reason);
+    if (this.run || !this.returnPose) return;
+    if (reason === 'return') {
+      this.position = this.returnPose.position;
+      this.heading = this.returnPose.heading;
+    }
+    this.returnPose = null;
+    this.navigation = null;
+    this.schoolSites = [];
   }
 
   override spawnHotspots() {
@@ -179,9 +201,13 @@ export class Expedition extends Pond {
   }
 
   private replenishSchool() {
-    const available = schoolSites.filter(site => clear(site, site, this.obstacles, .55)
-      && this.schools.every(school => distance(site, school) > 1));
-    const nearby = available.filter(site => distance(this.position, site) < 14);
+    const navigation = this.navigation;
+    if (!navigation) return;
+    const available = this.schoolSites.filter(site => this.schools.every(school => distance(site, school) > schoolRadius * 2));
+    const nearby = available.filter(site => {
+      const range = distance(this.position, site);
+      return range >= castMinimum && range <= castReach && navigation.clear(this.position, site);
+    });
     const options = nearby.length ? nearby : available;
     const site = options[Math.floor(this.random() * options.length)];
     if (site) this.schools.push({ ...site, id: this.schoolId++ });
@@ -241,7 +267,8 @@ export class Expedition extends Pond {
 
   private moveBoat(dt: number) {
     if (this.run?.phase !== 'ready' && !(this.run?.phase === 'pack' && this.aiming)) return;
-    if (this.drawing && !this.aiming) return;
+    const navigation = this.navigation;
+    if (!navigation || (this.drawing && !this.aiming)) return;
     const side = Number(this.helm.has('east')) - Number(this.helm.has('west'));
     const north = Number(this.helm.has('north')) - Number(this.helm.has('south'));
     const speed = this.drawing ? 2 : 4.65;
@@ -251,21 +278,44 @@ export class Expedition extends Pond {
     this.velocity.z += ((-side * waterCamera.x - north * waterCamera.z) * scale - this.velocity.z) * ease;
     for (const axis of ['x', 'z'] as const) {
       const next = { ...this.position, [axis]: this.position[axis] + this.velocity[axis] * dt };
-      if (clear(this.position, next, this.obstacles, 1.25)) this.position = next;
+      if (!this.velocity[axis]) continue;
+      const [bow, stern] = hullSpine(this.position, this.heading);
+      const [nextBow, nextStern] = hullSpine(next, this.heading);
+      // The frame's sweep is checked at the two ends and across the destination hull.
+      if (navigation.clear(bow, nextBow, boatClearance) && navigation.clear(stern, nextStern, boatClearance)
+        && navigation.clear(nextBow, nextStern, boatClearance)) this.position = next;
       else this.velocity[axis] = 0;
     }
     if (Math.hypot(this.velocity.x, this.velocity.z) > .25) {
-      const delta = Math.atan2(-this.velocity.x, -this.velocity.z) - this.heading;
-      this.heading += Math.atan2(Math.sin(delta), Math.cos(delta)) * Math.min(1, dt * 10);
+      this.turnBoatTowards(Math.atan2(-this.velocity.x, -this.velocity.z), Math.min(1, dt * 10));
+    }
+  }
+
+  private turnBoatTowards(heading: number, ease: number) {
+    const navigation = this.navigation;
+    if (!navigation) return;
+    const delta = heading - this.heading;
+    const turn = Math.atan2(Math.sin(delta), Math.cos(delta)) * ease;
+    if (Math.abs(turn) < 1e-6) return;
+    const steps = Math.ceil(Math.abs(turn) / .16);
+    const turnStep = turn / steps;
+    // A slightly wider capsule at the midpoint covers the arc between checked poses.
+    const arcClearance = boatClearance + 2 * boatSpineHalfLength * Math.sin(Math.abs(turnStep) / 4);
+    for (let i = 0; i < steps; i += 1) {
+      const [a, b] = hullSpine(this.position, this.heading + turnStep / 2);
+      if (!navigation.clear(a, b, arcClearance)) break;
+      this.heading += turnStep;
     }
   }
 
   private spawnMonster() {
+    const navigation = this.navigation;
+    if (!navigation) return;
     const offset = this.random() * Math.PI * 2;
     for (let i = 0; i < 12; i += 1) {
       const angle = offset + i * Math.PI / 6;
       const point = { x: this.position.x + Math.cos(angle) * 8.5, z: this.position.z + Math.sin(angle) * 8.5 };
-      if (!clear(point, this.position, this.obstacles, .3) || !inside(point, .45)) continue;
+      if (!navigation.clear(point, point, .45) || !navigation.clear(point, this.position, .3)) continue;
       this.monster = { ...point, age: 0, windup: 0, steering: 0 };
       this.tell('Прислужник поднялся из воды. Достань лук.');
       return;
@@ -281,10 +331,12 @@ export class Expedition extends Pond {
   private moveMonster(dt: number) {
     const monster = this.monster;
     const run = this.run;
-    if (!monster || !run) return;
+    const navigation = this.navigation;
+    if (!monster || !run || !navigation) return;
     monster.age += dt;
     if (monster.age < .78) return;
-    if (distance(monster, this.position) < 1.65) {
+    const blocked = !navigation.clear(monster, this.position, .3);
+    if (!blocked && distance(monster, this.position) < 1.65) {
       monster.windup += dt;
       if (monster.windup >= .74) {
         run.health -= this.balance.wrath.attackDamage;
@@ -299,11 +351,10 @@ export class Expedition extends Pond {
     const direction = Math.atan2(this.position.z - monster.z, this.position.x - monster.x);
     const step = dt * (this.stage === 3 ? 4.85 : 3.4);
     const turn = monster.steering || 1;
-    const blocked = !clear(monster, this.position, this.obstacles, .3);
     if (!blocked) monster.steering = 0;
     for (const offset of blocked ? [turn * .76, turn * 1.48, turn * 2.15, -turn * .76, -turn * 1.48] : [0]) {
       const next = { x: monster.x + Math.cos(direction + offset) * step, z: monster.z + Math.sin(direction + offset) * step };
-      if (!clear(monster, next, this.obstacles, .3)) continue;
+      if (!navigation.clear(monster, next, .3)) continue;
       Object.assign(monster, next);
       monster.steering = Math.sign(offset);
       break;
@@ -316,13 +367,14 @@ export class Expedition extends Pond {
       if (this.impact.age >= .55) this.impact = null;
     }
     const arrow = this.arrow;
-    if (!arrow) return;
+    const navigation = this.navigation;
+    if (!arrow || !navigation) return;
     const previous = between(arrow.start, arrow.end, arrow.age / arrow.travel);
     arrow.age = Math.min(arrow.travel, arrow.age + dt);
     const next = between(arrow.start, arrow.end, arrow.age / arrow.travel);
     const monster = this.monster;
     const enemyHit = monster ? contact(previous, next, monster, .82) : Infinity;
-    const obstruction = Math.min(...this.obstacles.map(item => contact(previous, next, item, item.radius)));
+    const obstruction = navigation.firstContact(previous, next);
     const hit = enemyHit <= 1 && enemyHit < obstruction;
     if (hit) this.resetMonster();
     const at = Math.min(enemyHit, obstruction, 1);

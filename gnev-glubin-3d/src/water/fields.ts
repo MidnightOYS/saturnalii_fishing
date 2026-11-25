@@ -138,6 +138,7 @@ export class WakeField {
   }
 
   emit(time: number, stern: WaterPoint, travel: WaterPoint) {
+    this.prune(time);
     const speed = Math.hypot(travel.x, travel.z);
     if (speed < .55) { this.breakTrail = true; return; }
     let trail = this.data[this.data.length - 1];
@@ -156,13 +157,17 @@ export class WakeField {
     this.breakTrail = false;
   }
 
-  render(renderer: T.WebGLRenderer, time: number) {
+  private prune(time: number) {
     for (const trail of this.data) {
       while (trail.length && time - trail[0].time >= lifetime) trail.shift();
     }
     for (let j = this.data.length - 1; j > 0; j -= 1) {
       if (!this.data[j].length && j < this.data.length - 1) this.data.splice(j, 1);
     }
+  }
+
+  render(renderer: T.WebGLRenderer, time: number) {
+    this.prune(time);
     let vertex = 0, index = 0;
     for (const trail of this.data) {
       if (trail.length < 2 || vertex + trail.length * 6 > this.positions.count) continue;

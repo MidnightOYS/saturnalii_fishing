@@ -1,0 +1,20 @@
+#lab-ui[data-layer-mode="refraction"] { --accent: #a7dcca; }
+#lab-ui[data-layer-mode="meadow"] { --accent: #c4d79c; }
+#lab-ui[data-layer-mode="wreck"] { --accent: #dfbc90; }
+#lab-ui[data-layer-mode="night"] { --accent: #9fd6ec; }
+.lab-nav button:hover { background: #314b49; }
+.lab-nav button[aria-pressed="true"]:hover { background: var(--accent); }
+.lab-controls { margin-top: 4px; }
+.lab-panel { padding-top: 11px; }
+.lab-action-row button { min-height: 29px; }
+.lab-presets button { white-space: nowrap; }
+
+@media (max-width: 720px) {
+  .lab-nav { max-width: calc(100vw - 24px); flex-wrap: wrap; }
+  .lab-nav button { min-height: 31px; }
+  .lab-inspector[open] { top: max(114px, calc(env(safe-area-inset-top) + 105px)); max-height: calc(100dvh - 136px); }
+}
+@media (max-width: 430px) {
+  .lab-nav button { padding: 6px 8px; }
+  .lab-nav button span { display: none; }
+}
