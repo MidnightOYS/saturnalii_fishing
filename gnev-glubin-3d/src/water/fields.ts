@@ -203,8 +203,15 @@ export class WakeField {
     // Clear once after the last segment fades. An empty field needn't cost a pass.
     if (index || this.dirty) {
       this.geometry.setDrawRange(0, index);
-      renderer.setRenderTarget(this.target);
-      renderer.render(this.scene, this.camera);
+      const previousTarget = renderer.getRenderTarget();
+      const previousCubeFace = renderer.getActiveCubeFace();
+      const previousMipmapLevel = renderer.getActiveMipmapLevel();
+      try {
+        renderer.setRenderTarget(this.target);
+        renderer.render(this.scene, this.camera);
+      } finally {
+        renderer.setRenderTarget(previousTarget, previousCubeFace, previousMipmapLevel);
+      }
     }
     this.dirty = index > 0;
     return this.dirty;
