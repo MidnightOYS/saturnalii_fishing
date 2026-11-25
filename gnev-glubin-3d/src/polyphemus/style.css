@@ -1,0 +1,309 @@
+#dock-polyphemus {
+  --tide-icon: url('../hud-tide/art/mullet.png');
+  left: clamp(100px, 23%, 540px);
+  top: 72%;
+}
+
+#game #menu[data-mode="polyphemus"] {
+  width: min(898px, calc(100% - 24px));
+  max-height: calc(100dvh - 24px);
+  border: 1px solid #906747;
+  border-radius: 4px;
+  color: #f6e4cc;
+  background: #101414;
+  box-shadow: 0 0 0 4px #131a18, 0 26px 96px #010609eb;
+  scrollbar-width: thin;
+  scrollbar-color: #805d3d #091719;
+}
+
+#game #menu[data-mode="polyphemus"]::backdrop {
+  background: #030b0dd0;
+  backdrop-filter: blur(5px);
+}
+
+#game #menu[data-mode="polyphemus"] #menu-content {
+  padding: 0;
+  border: none;
+  border-image: none;
+  background: transparent;
+}
+
+#game #menu[data-mode="polyphemus"] .panel-head {
+  margin: 0;
+  padding: 19px clamp(18px, 4vw, 34px) 17px;
+  border-bottom: 1px solid #936c4463;
+  background: linear-gradient(110deg, #25312c, #101817 68%, #0a1010);
+}
+
+#game #menu[data-mode="polyphemus"] .panel-head h2 {
+  margin: 0;
+  color: #f6e5c9;
+  font-size: clamp(30px, 4vw, 47px);
+  text-wrap: pretty;
+}
+
+#game #menu[data-mode="polyphemus"] .panel-head .eyebrow {
+  margin-bottom: 7px;
+  color: #d7aa79;
+  letter-spacing: .17em;
+}
+
+.poly-body {
+  --jaw: .7;
+  --height: 0;
+  --poly-muted: #c0bfad;
+  --poly-gold: #f5c48a;
+  display: grid;
+  grid-template-columns: minmax(0, 1.13fr) minmax(0, 1fr);
+  min-height: 382px;
+  background: radial-gradient(ellipse at 0 0, #23332b, #111a18 60%, #0d1414);
+}
+
+.poly-details {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 18px clamp(18px, 4vw, 34px) 22px;
+}
+
+.poly-copy {
+  max-width: 35ch;
+  color: #e8ddc7;
+  text-wrap: pretty;
+}
+
+.poly-footnote {
+  color: var(--poly-muted);
+  font-size: .82rem;
+  text-wrap: pretty;
+}
+
+.poly-picker {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 6px 0;
+}
+
+.poly-picker > div { flex: 1; min-width: 0; }
+.poly-picker label, .poly-kicker { color: var(--poly-muted); font-size: .82rem; }
+.poly-picker select {
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px;
+  border: 1px solid #8f7656;
+  border-radius: 3px;
+  color: #f6e6cf;
+  background: #172621;
+  font: inherit;
+}
+
+.poly-picker select:focus-visible, .poly-controls button:focus-visible {
+  outline: 2px solid #a1eed8;
+  outline-offset: 3px;
+}
+
+.poly-fish {
+  display: block;
+  width: 66px;
+  height: 48px;
+  flex-shrink: 0;
+  background: var(--species) center / contain no-repeat;
+  filter: drop-shadow(0 5px 5px #000a);
+}
+
+.poly-fish[data-species="mullet"] { --species: url('../hud-tide/art/mullet.png'); }
+.poly-fish[data-species="perch"] { --species: url('../hud-tide/art/perch.png'); }
+.poly-fish[data-species="oracle"] { --species: url('../hud-tide/art/oracle.png'); }
+.poly-fish[data-species="viper"] { --species: url('../hud-tide/art/viper.png'); }
+.poly-fish[data-species="crown"] { --species: url('../hud-tide/art/crown.png'); }
+.poly-fish[data-condition="1"] { filter: saturate(.52) sepia(.25) brightness(.83); }
+.poly-fish[data-condition="2"] { filter: saturate(.25) sepia(.45) brightness(.74); }
+
+.poly-terms {
+  display: flex;
+  gap: 11px 18px;
+  flex-wrap: wrap;
+  margin: 0;
+  padding-block: 9px;
+  border-block: 1px solid #956f4961;
+}
+
+.poly-terms dt { color: var(--poly-muted); font-size: .77rem; }
+.poly-terms dd { margin: 3px 0 0; color: var(--poly-gold); font-weight: 700; font-variant-numeric: tabular-nums; }
+.poly-notice { color: #f1b391; font-size: .89rem; }
+
+.poly-controls { display: flex; flex-wrap: wrap; gap: 8px; }
+.poly-controls button {
+  min-height: 43px;
+  padding: 8px 15px;
+  border: 1px solid #98673f;
+  border-radius: 3px;
+  background: #24312a;
+  font-weight: 650;
+}
+
+.poly-controls button.poly-primary {
+  border-color: #efb979;
+  color: #201811;
+  background: linear-gradient(164deg, #f3cb95, #c98951);
+  box-shadow: inset 0 1px #fff1c96f;
+}
+
+.poly-controls button.poly-primary:hover:not(:disabled):not([aria-disabled="true"]) { background: #fbd4a3; }
+.poly-controls button[aria-disabled="true"] { opacity: .54; cursor: default; }
+#game .poly-controls kbd {
+  margin-left: 5px;
+  color: #362419;
+  border: 1px solid #52392477;
+  border-image: none;
+  background: #ffdba050;
+}
+
+.poly-portrait {
+  position: relative;
+  isolation: isolate;
+  min-height: 100%;
+  overflow: hidden;
+  background: #020505;
+  border-left: 1px solid #98745142;
+}
+
+.poly-art {
+  position: absolute;
+  top: 40%;
+  right: 0;
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  transform: translateY(-42%);
+  overflow: hidden;
+  background: #030303;
+}
+
+.poly-head, .poly-jaw {
+  position: absolute;
+  inset: 0;
+  background: url('./portrait.jpg?inline') center / 100% 100% no-repeat;
+}
+
+.poly-head {
+  clip-path: polygon(0 0, 100% 0, 100% 76%, 93% 74%, 86% 67%, 84% 59%,
+    77% 57%, 71% 58%, 62% 55%, 55% 57%, 45% 56%, 34% 60%, 27% 63%, 0 66%);
+}
+.poly-jaw {
+  clip-path: polygon(0 69%, 20% 69%, 27% 67%, 39% 68%, 52% 67%, 63% 66%,
+    75% 68%, 84% 68%, 92% 73%, 100% 77%, 100% 100%, 0 100%);
+  transform-origin: 88% 69%;
+  transform: translateY(calc(var(--jaw) * -11%)) rotate(calc(var(--jaw) * 3deg));
+}
+
+.poly-portrait::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+  background: linear-gradient(0deg, #020604 3%, #07120c35 32%, transparent 54%);
+  pointer-events: none;
+}
+
+.poly-caption {
+  position: absolute;
+  z-index: 1;
+  right: 21px;
+  bottom: 15px;
+  display: grid;
+  text-align: right;
+  text-shadow: 0 3px 12px #000;
+}
+
+.poly-caption span { color: #d8b28b; font-size: .69rem; text-transform: uppercase; letter-spacing: .19em; }
+.poly-caption strong { color: #f6e7c9; font: 400 clamp(22px, 3.6vw, 42px)/1.02 Georgia, serif; }
+
+.poly-live { display: grid; grid-template-columns: minmax(0, 1fr) minmax(88px, 34%); gap: 15px; align-items: center; }
+.poly-quote { display: grid; justify-items: start; font-variant-numeric: tabular-nums; }
+.poly-quote strong { color: var(--poly-gold); font: 400 clamp(37px, 6.9vw, 88px)/1 Georgia, serif; white-space: nowrap; }
+.poly-payout-label { padding-top: 12px; }
+.poly-quote [data-poly-payout] { color: #ffe6bc; font-size: clamp(19px, 2.5vw, 30px); font-weight: 650; }
+
+.poly-meter {
+  position: relative;
+  height: clamp(120px, 30vh, 220px);
+  overflow: hidden;
+  border-left: 1px solid #735945;
+  background: linear-gradient(180deg, #b1804940, #253a30a3 36%, #121c1b9c 91%);
+}
+
+.poly-rail {
+  position: absolute;
+  left: 8px;
+  top: 13px;
+  bottom: 13px;
+  width: 11px;
+  background: repeating-linear-gradient(0deg, #98826690 0 1px, transparent 1px 12.5%);
+  border-block: 1px solid #ae8a5e;
+}
+
+.poly-swimmer {
+  position: absolute;
+  inset: 26px 6px 26px 18px;
+}
+
+.poly-swimmer .poly-fish {
+  position: absolute;
+  top: calc((1 - var(--height)) * 100%);
+  left: 50%;
+  width: 100%;
+  max-width: 100px;
+  height: 50px;
+  transform: translate(-50%, -50%) rotate(calc((.5 - var(--height)) * 17deg));
+}
+
+.poly-time {
+  height: 6px;
+  margin: 0;
+  border: none;
+  border-radius: 20px;
+  overflow: hidden;
+  color: #d9b883;
+  background: #413b31;
+}
+.poly-time::-webkit-progress-bar { background: #413b31; }
+.poly-time::-webkit-progress-value { background: #d9b883; }
+.poly-time::-moz-progress-bar { background: #d9b883; }
+.poly-signal { min-height: 1.45em; margin-top: -8px; color: var(--poly-muted); font-size: .84rem; }
+.poly-playing[data-warning="danger"] .poly-signal { color: #ff9f86; }
+.poly-playing[data-warning="danger"] .poly-time::-webkit-progress-value { background: #f08569; }
+.poly-playing[data-warning="danger"] .poly-time::-moz-progress-bar { background: #f08569; }
+.poly-playing[data-warning="crest"] .poly-quote strong { color: #fff7c1; text-shadow: 0 0 25px #ffce588a; }
+
+.poly-result { --jaw: 1; }
+.poly-result .poly-fish { width: 89px; height: 64px; }
+.poly-result-number { margin: 3px 0 7px; color: var(--poly-gold); font: 400 clamp(30px, 6vw, 58px)/1.02 Georgia, serif; }
+.poly-result[data-outcome="bitten"] .poly-result-number { color: #ffab8d; }
+.poly-settlement .poly-notice { margin-top: 6px; }
+
+.harbor-fish-sales summary { width: fit-content; cursor: pointer; color: #ecbd87; font-size: .88rem; }
+.harbor-fish-sales ul { display: grid; gap: 4px; list-style: none; padding: 0; margin: 7px 0 10px; }
+.harbor-fish-sales li { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.harbor-fish-sales li button { padding: 4px 8px; font-size: .8rem; white-space: nowrap; }
+
+@media (max-width: 600px) {
+  #dock-polyphemus { left: clamp(75px, 28%, 165px); top: 84%; }
+
+  #game #menu[data-mode="polyphemus"] .panel-head { padding-block: 12px; }
+  .poly-body { grid-template-columns: minmax(0, 1fr) minmax(110px, 34%); min-height: 302px; }
+  .poly-details { gap: 10px; padding: 12px; font-size: .88rem; }
+  .poly-picker .poly-fish { display: none; }
+  .poly-live { grid-template-columns: minmax(0, 1fr) 52px; gap: 7px; }
+  .poly-quote strong { font-size: clamp(29px, 8.4vw, 52px); }
+  .poly-controls button { padding-inline: 9px; }
+  .poly-controls kbd { display: none; }
+  .poly-art { top: 36%; width: 161%; right: -18%; }
+  .poly-caption { right: 9px; bottom: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .poly-swimmer .poly-fish { transform: translate(-50%, -50%); }
+}

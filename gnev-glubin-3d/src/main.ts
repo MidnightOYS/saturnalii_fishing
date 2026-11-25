@@ -1,8 +1,12 @@
 import './style.css';
 import './visual-inspector.css';
 import './hud-tide/theme.css';
+import './polyphemus/style.css';
 import { counter, fish, zones } from './rules/game.js';
+import { enemyNames, enemyTiming } from './enemies';
 import { Expedition } from './expedition';
+import { conditionNames, readPolyphemusSave, stakeKey } from './polyphemus/rules';
+import { bindPolyphemusFrame, polyphemusResult, polyphemusRound, polyphemusSetup } from './polyphemus/view';
 import { disposeLocation, loadLocation, type LoadedLocation } from './location-assets';
 import type { LocationSlot } from './location-navigation';
 import { createScene } from './scene';
@@ -15,7 +19,7 @@ const waterSaveKey = 'gnev-glubin-3d.water.v1';
 type Meta = InstanceType<typeof Expedition>['meta'];
 type FishId = keyof typeof fish;
 type Input = 'left' | 'right' | 'reel';
-type Menu = 'map' | 'shop' | 'result' | 'exit';
+type Menu = 'map' | 'shop' | 'result' | 'exit' | 'polyphemus';
 const locationInfo = {
   pond: { name: 'Лунный водосбор', description: 'Тихая вода у каменной цистерны. Первый косяк у пристани.' },
   temple: { name: 'Гавань затонувшего лика', description: 'Бронзовый лик под водой. Гнев растёт быстрее, редкий улов попадается чаще.' },
@@ -43,7 +47,7 @@ function readProgress(): Partial<Meta> {
       .filter(id => count(saved?.sales?.[id]) > 0)
       .map(id => [id, count(saved.sales[id])]));
     return {
-      gold: count(saved?.gold), xp: count(saved?.xp), sales,
+      gold: count(saved?.gold), xp: count(saved?.xp), sales, ...readPolyphemusSave(saved),
       boat: saved?.boat === true, line: saved?.line === true,
       quotaMet: saved?.quotaMet === true, visitedTemple: saved?.visitedTemple === true,
       ...(saved?.offerings === undefined ? {} : { offerings: count(saved.offerings) })
@@ -129,6 +133,9 @@ let selectedZone: LocationSlot = 'pond';
 let loadingLocation: AbortController | null = null;
 let mapNotice = '';
 let shopNotice = '';
+let shopSalesExpanded = false;
+let selectedStake = '';
+let paintPolyphemus: ReturnType<typeof bindPolyphemusFrame> | null = null;
 let fittingSail = false;
 let inspectingHold = false;
 let lastPhaseLabel = '';
@@ -196,11 +203,17 @@ function showMenu(name: Menu) {
 }
 
 function closeMenu() {
+  if (currentMenu === 'polyphemus') {
+    if (game.polyphemus.round) return;
+    game.polyphemus.outcome = null;
+    paintPolyphemus = null;
+  }
   const fromResult = currentMenu === 'result';
   if (fromResult) game.result = null;
   loadingLocation?.abort();
   loadingLocation = null;
   currentMenu = null;
+  delete menu.dataset.mode;
   menu.close();
   if (fromResult) byId('dock-boat').focus();
   else if (focusAfterDialog?.isConnected && !focusAfterDialog.closest('[hidden]')) focusAfterDialog.focus();
@@ -220,6 +233,25 @@ function renderMenu() {
   const previous = menuContent.contains(document.activeElement) && document.activeElement instanceof HTMLButtonElement
     ? document.activeElement.dataset : null;
 
+  const parlor = game.polyphemus;
+  paintPolyphemus = null;
+  if (currentMenu === 'polyphemus') {
+    menu.dataset.mode = 'polyphemus';
+    if (parlor.round) {
+      menuContent.innerHTML = heading('Пари Полифема', 'Причал', false) + polyphemusRound(parlor.round);
+      paintPolyphemus = bindPolyphemusFrame(menuContent);
+      menuContent.querySelector<HTMLButtonElement>('[data-action="poly-cashout"]')?.focus();
+    } else if (parlor.outcome) {
+      const title = parlor.outcome.kind === 'paid' ? 'Цена зафиксирована' : 'Пасть сомкнулась';
+      menuContent.innerHTML = heading(title, 'Пари Полифема') + polyphemusResult(parlor, game.meta.gold);
+      menuContent.querySelector<HTMLButtonElement>('[data-action="poly-again"]')?.focus();
+    } else {
+      menuContent.innerHTML = heading('Пари Полифема', 'Причал') + polyphemusSetup(parlor, game.meta.gold, selectedStake);
+    }
+    return;
+  }
+
+  delete menu.dataset.mode;
   if (currentMenu === 'map') {
     const locked = selectedZone === 'temple' && !game.meta.boat;
     const cards = zones.map(zone => {
@@ -235,9 +267,11 @@ function renderMenu() {
       <button class="primary" data-action="sail" ${locked || loadingLocation || fittingSail || !scene ? 'disabled' : ''}>Выйти на воду</button></div>
       <p class="map-notice" role="status">${loadingLocation ? 'Готовим лодку и локацию…' : fittingSail ? 'Устанавливаем парус…' : mapNotice}</p>`;
   } else if (currentMenu === 'shop') {
-    const catchForSale = Object.entries(game.meta.sales) as [FishId, number][];
-    const value = catchForSale.reduce((sum, [id, amount]) => sum + price(id) * amount, 0);
-    const catchNames = catchForSale.map(([id, count]) => `${fish[id].name} × ${count}`).join(' · ');
+    const catchForSale = parlor.inventory();
+    const value = catchForSale.reduce((sum, item) => sum + item.price * item.count, 0);
+    const label = (item: typeof catchForSale[number]) => fish[item.id].name
+      + (item.condition ? ` (${conditionNames[item.condition].toLowerCase()})` : '');
+    const catchNames = catchForSale.map(item => `${label(item)} × ${item.count}`).join(' · ');
     const upgrades = [
       { id: 'boat', name: 'Парус для лодки', effect: 'Заменяет вёсла и открывает Гавань затонувшего лика.' },
       { id: 'line', name: 'Крепкая леска', effect: 'Натяжение нарастает медленнее.' },
@@ -247,6 +281,11 @@ function renderMenu() {
       <p class="panel-text">${game.meta.quotaMet ? 'Продай доставленный улов и выбери улучшение.' : 'Улучшения станут доступны после первой выполненной квоты.'}</p>
       <div class="menu-row"><div><strong>Улов на продажу</strong><small>${catchNames || 'Пока пусто'}</small></div>
       <button class="primary" data-action="sell" ${catchForSale.length ? '' : 'disabled'}>Продать · ${value} др.</button></div>
+      ${catchForSale.length ? `<details class="harbor-fish-sales" ${shopSalesExpanded ? 'open' : ''}>
+        <summary>Продать одну рыбу</summary><ul>${catchForSale.map(item => `<li>
+          <span>${label(item)} · ${item.count} шт.</span><button type="button" data-action="sell-one"
+          data-id="${stakeKey(item)}" aria-label="Продать одну · ${label(item)} · ${item.price} др.">+${item.price} др.</button></li>`).join('')}</ul>
+      </details>` : ''}
       ${upgrades.map(({ id, name, effect }) => {
         const cost = game.balance.economy[id];
         const bought = id !== 'offering' && game.meta[id];
@@ -307,7 +346,11 @@ function renderWater() {
   hud.offeringButton.disabled = !game.meta.offerings || phase === 'surge';
   hud.returnButton.disabled = phase === 'pack' || phase === 'surge' || inspectingHold;
   hud.attack.hidden = !game.monster;
-  if (game.monster) setText(hud.attack, game.monster.windup > 0 ? 'Прислужник замахнулся!' : 'Прислужник идёт к лодке');
+  if (game.monster) {
+    const threat = game.monster.windup > 0 ? 'готовит удар!'
+      : game.monster.age < enemyTiming.emerge ? 'всплывает' : 'идёт к лодке';
+    setText(hud.attack, `${enemyNames[game.monster.kind]} ${threat}`);
+  }
   hud.bow.disabled = phase === 'surge';
   hud.bow.setAttribute('aria-pressed', String(game.aiming));
   hud.bowMeter.hidden = !game.aiming;
@@ -528,7 +571,7 @@ async function buySail() {
   renderMenu();
   try {
     await scene.prepareSail();
-    if (game.buy('boat')) {
+    if (!game.polyphemus.round && game.buy('boat')) {
       shopNotice = 'Парус установлен. Гавань затонувшего лика открыта.';
       save();
       updateDock();
@@ -542,6 +585,18 @@ async function buySail() {
   }
 }
 
+function updatePolyphemus(now: number, cashOut = false) {
+  const parlor = game.polyphemus;
+  if (parlor.settle(now, cashOut)) {
+    save();
+    updateDock();
+    if (currentMenu === 'polyphemus') renderMenu();
+    return;
+  }
+  const quote = parlor.quote(now);
+  if (quote) paintPolyphemus?.(quote);
+}
+
 function action(button: HTMLButtonElement) {
   const { action, id } = button.dataset;
   if (water.contains(button)) zoneIntro.hidden = true;
@@ -550,8 +605,32 @@ function action(button: HTMLButtonElement) {
       toggleWaterInspector();
       break;
     case 'shop':
+    case 'poly-shop':
       shopNotice = '';
+      shopSalesExpanded = false;
       showMenu('shop');
+      break;
+    case 'polyphemus':
+      if (!game.run && !game.result && !fittingSail) showMenu('polyphemus');
+      break;
+    case 'poly-start': {
+      if (currentMenu !== 'polyphemus' || game.run || game.result) break;
+      const selection = byId<HTMLSelectElement>('poly-stake');
+      const stake = game.polyphemus.inventory().find(item => stakeKey(item) === selection?.value);
+      if (!stake || !game.polyphemus.start({ id: stake.id, condition: stake.condition }, performance.now())) break;
+      selectedStake = stakeKey(stake);
+      save();
+      updateDock();
+      renderMenu();
+      break;
+    }
+    case 'poly-cashout':
+      if (currentMenu === 'polyphemus') updatePolyphemus(performance.now(), true);
+      break;
+    case 'poly-again':
+      game.polyphemus.outcome = null;
+      renderMenu();
+      byId('poly-stake')?.focus();
       break;
     case 'map':
       selectedZone = 'pond';
@@ -570,11 +649,18 @@ function action(button: HTMLButtonElement) {
       closeMenu();
       break;
     case 'sell':
-      shopNotice = `За улов получено ${game.sell()} др.`;
+    case 'sell-one': {
+      if (currentMenu !== 'shop' || game.polyphemus.round) break;
+      const stake = action === 'sell-one' ? game.polyphemus.inventory().find(item => stakeKey(item) === id) : undefined;
+      if (action === 'sell-one' && !stake) break;
+      shopSalesExpanded = Boolean(menuContent.querySelector('.harbor-fish-sales[open]'));
+      const value = stake ? game.polyphemus.sell(stake) : game.sell();
+      shopNotice = `За улов получено ${value} др.`;
       save();
       updateDock();
       renderMenu();
       break;
+    }
     case 'buy':
       if (id === 'boat') {
         void buySail();
@@ -640,6 +726,14 @@ document.addEventListener('click', event => {
   if (button && !button.disabled) action(button);
 });
 
+menuContent.addEventListener('change', event => {
+  if (event.target instanceof HTMLSelectElement && event.target.id === 'poly-stake') {
+    selectedStake = event.target.value;
+    renderMenu();
+    byId('poly-stake')?.focus();
+  }
+});
+
 hold.addEventListener('pointerover', event => highlightCell((event.target as HTMLElement).closest('.cell')));
 hold.addEventListener('pointerleave', () => highlightCell(null));
 hold.addEventListener('focusin', event => highlightCell((event.target as HTMLElement).closest('.cell')));
@@ -665,6 +759,12 @@ function syncKeys() {
 }
 
 document.addEventListener('keydown', event => {
+  if (currentMenu === 'polyphemus' && game.polyphemus.round && event.code === 'Space'
+    && !event.altKey && !event.ctrlKey && !event.metaKey) {
+    event.preventDefault();
+    if (!event.repeat) updatePolyphemus(performance.now(), true);
+    return;
+  }
   if (event.target instanceof Node && waterInspector.contains(event.target)) {
     if (event.code === 'Escape') toggleWaterInspector();
     return;
@@ -755,7 +855,10 @@ for (const kind of ['pointercancel', 'lostpointercapture']) {
   });
 }
 window.addEventListener('blur', clearInputs);
-document.addEventListener('visibilitychange', clearInputs);
+document.addEventListener('visibilitychange', () => {
+  clearInputs();
+  if (game.polyphemus.round) updatePolyphemus(performance.now());
+});
 
 let previousFrame = performance.now();
 function frame(now: number) {
@@ -773,9 +876,11 @@ function frame(now: number) {
     processEvents();
     renderWater();
   }
+  if (game.polyphemus.round) updatePolyphemus(now);
   scene?.update(dt, boatSpeed);
   requestAnimationFrame(frame);
 }
 
+if (game.recoveredStake) save();
 showDock();
 requestAnimationFrame(frame);

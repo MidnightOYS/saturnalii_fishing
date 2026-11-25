@@ -136,7 +136,7 @@ export function createWatercolorPost() {
     return result;
   }
 
-  function render(renderer: T.WebGLRenderer, scene: T.Scene, camera: T.Camera, options: WatercolorSettings) {
+  function render(renderer: T.WebGLRenderer, scene: T.Scene, camera: T.Camera, options: WatercolorSettings, captureDepth = false) {
     if (!options.enabled || !(options.brush || options.grain || options.relief)) {
       renderer.render(scene, camera);
       return;
@@ -146,6 +146,10 @@ export function createWatercolorPost() {
     drawingSize.set(Math.max(1, drawingSize.x), Math.max(1, drawingSize.y));
     target ??= makeTarget(renderer);
     target.setSize(drawingSize.x, drawingSize.y);
+    if (captureDepth && !target.depthTexture) {
+      target.dispose();
+      target.depthTexture = new T.DepthTexture(drawingSize.x, drawingSize.y, T.UnsignedIntType);
+    }
     uniforms.tScene.value = target.texture;
     renderer.getSize(uniforms.uCssSize.value);
     uniforms.uCssSize.value.set(
@@ -179,6 +183,7 @@ export function createWatercolorPost() {
       renderer.autoClearDepth = autoClearDepth;
     }
     renderer.render(screen, screenCamera);
+    return captureDepth ? target.depthTexture ?? undefined : undefined;
   }
 
   function dispose() {

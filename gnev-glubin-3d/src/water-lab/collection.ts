@@ -292,13 +292,12 @@ export function createWaterCollection({
     }
   }
 
-  function renderScene(camera: CollectionCamera) {
+  function renderScene(camera: CollectionCamera, captureDepth = false) {
     if (post && currentMode === 'watercolor') {
-      post.render(renderer, scene, camera, { enabled: active.painted !== false, time, wrath: uniforms.uWrath.value,
-        brush: active.brush ?? .70, grain: active.grain ?? .45, relief: active.relief ?? .34 });
-    } else {
-      renderer.render(scene, camera);
+      return post.render(renderer, scene, camera, { enabled: active.painted !== false, time, wrath: uniforms.uWrath.value,
+        brush: active.brush ?? .70, grain: active.grain ?? .45, relief: active.relief ?? .34 }, captureDepth);
     }
+    renderer.render(scene, camera);
   }
 
   function clearRipples() {

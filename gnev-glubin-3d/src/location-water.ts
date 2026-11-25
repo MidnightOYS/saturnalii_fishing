@@ -84,6 +84,7 @@ export function createGameWater(renderer: T.WebGLRenderer, scene: T.Scene, layou
       const scale = pixelRatio * (paintSettings?.renderScale ?? 1);
       if (scale !== renderer.getPixelRatio()) renderer.setPixelRatio(scale);
     },
+    visualBasin: { layout, map, bounds },
     heightAt: collection.heightAt,
     renderPasses: collection.renderPasses,
     renderScene: collection.renderScene,

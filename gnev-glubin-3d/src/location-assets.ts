@@ -47,7 +47,7 @@ async function request(file: string, signal: AbortSignal) {
   return response;
 }
 
-async function readEmbeddedModel(script: HTMLScriptElement): Promise<ArrayBuffer> {
+export async function readEmbeddedModel(script: HTMLScriptElement): Promise<ArrayBuffer> {
   const bytes = Uint8Array.from(atob(script.textContent!.trim()), byte => byte.charCodeAt(0));
   if (script.dataset.compression !== 'gzip') return bytes.buffer;
   const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));

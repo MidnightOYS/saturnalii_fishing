@@ -1,9 +1,10 @@
 import { Pond } from './rules/game.js';
+import { enemyHitRadius, enemyLineup, enemyNames, enemyTiming, type EnemyEncounter, type EnemyExit } from './enemies';
+import { Polyphemus, readPolyphemusSave, type PolyphemusSave } from './polyphemus/rules';
 import { LocationNavigation, worldHeading, worldPoint, type LocationLayout, type Point } from './location-navigation';
 
 export type { Point } from './location-navigation';
 type School = Point & { id: number };
-type Monster = Point & { age: number; windup: number; steering: number };
 type Arrow = { start: Point; end: Point; age: number; travel: number };
 type MissedCast = { start: Point; end: Point; age: number };
 type Impact = Point & { hit: boolean; age: number };
@@ -44,6 +45,20 @@ function hullSpine(position: Point, heading: number): [Point, Point] {
 }
 
 export class Expedition extends Pond {
+  declare meta: Pond['meta'] & PolyphemusSave;
+  readonly polyphemus: Polyphemus;
+  readonly recoveredStake: boolean;
+
+  constructor(meta?: Partial<Pond['meta'] & PolyphemusSave>, random = Math.random) {
+    super({ ...meta, ...readPolyphemusSave(meta) }, random);
+    this.polyphemus = new Polyphemus(this.meta, id => this.balance[id].value, random);
+    this.recoveredStake = this.polyphemus.recover();
+  }
+
+  override sell() {
+    return this.polyphemus.sell();
+  }
+
   readonly helm = new Set<string>();
   position: Point = { x: 1, z: 0 };
   heading = .45;
@@ -52,7 +67,8 @@ export class Expedition extends Pond {
   fishingSpot: School | null = null;
   castPoint: Point | null = null;
   missedCast: MissedCast | null = null;
-  monster: Monster | null = null;
+  monster: EnemyEncounter | null = null;
+  monsterExit: EnemyExit | null = null;
   aiming = false;
   drawing = false;
   charge = 0;
@@ -61,6 +77,7 @@ export class Expedition extends Pond {
   impact: Impact | null = null;
   private schoolTimer = 0;
   private monsterTimer = 0;
+  private monsterIndex = 0;
   private schoolId = 1;
   private castChargeAge = 0;
   private returnPose: { position: Point; heading: number } | null = null;
@@ -126,7 +143,7 @@ export class Expedition extends Pond {
   }
 
   override start(id: string, layout?: LocationLayout) {
-    if (!layout || layout.proposed_three_slot !== id) return false;
+    if (this.polyphemus.round || !layout || layout.proposed_three_slot !== id) return false;
     const navigation = new LocationNavigation(layout);
     const pose = (anchor: 'boat_spawn' | 'boat_return') => ({
       position: worldPoint(layout.anchors_xyz[anchor]),
@@ -173,6 +190,8 @@ export class Expedition extends Pond {
     this.castPoint = null;
     this.missedCast = null;
     this.monster = null;
+    this.monsterExit = null;
+    this.monsterIndex = 0;
     this.aiming = false;
     this.abortDraw();
     this.arrow = null;
@@ -310,20 +329,28 @@ export class Expedition extends Pond {
 
   private spawnMonster() {
     const navigation = this.navigation;
-    if (!navigation) return;
+    const run = this.run;
+    if (!navigation || !run) return;
+    const lineup = enemyLineup[run.zone.id as keyof typeof enemyLineup];
     const offset = this.random() * Math.PI * 2;
     for (let i = 0; i < 12; i += 1) {
       const angle = offset + i * Math.PI / 6;
       const point = { x: this.position.x + Math.cos(angle) * 8.5, z: this.position.z + Math.sin(angle) * 8.5 };
       if (!navigation.clear(point, point, .45) || !navigation.clear(point, this.position, .3)) continue;
-      this.monster = { ...point, age: 0, windup: 0, steering: 0 };
-      this.tell('Прислужник поднялся из воды. Достань лук.');
+      const kind = lineup[this.monsterIndex % lineup.length];
+      this.monsterIndex += 1;
+      this.monster = {
+        ...point, kind, age: 0, windup: 0, steering: 0, moving: false,
+        heading: Math.atan2(this.position.x - point.x, this.position.z - point.z),
+      };
+      this.tell(`Из воды поднялся прислужник Посейдона — ${enemyNames[kind]}. Достань лук.`);
       return;
     }
     this.monsterTimer = 1;
   }
 
-  private resetMonster() {
+  private resetMonster(monster: EnemyEncounter, clip: EnemyExit['clip']) {
+    this.monsterExit = { monster, clip };
     this.monster = null;
     this.monsterTimer = this.balance.wrath.attackInterval + this.random() * this.balance.wrath.attackSpread * .6;
   }
@@ -334,13 +361,15 @@ export class Expedition extends Pond {
     const navigation = this.navigation;
     if (!monster || !run || !navigation) return;
     monster.age += dt;
-    if (monster.age < .78) return;
+    if (monster.age < enemyTiming.emerge) return;
+    monster.moving = false;
+    monster.heading = Math.atan2(this.position.x - monster.x, this.position.z - monster.z);
     const blocked = !navigation.clear(monster, this.position, .3);
     if (!blocked && distance(monster, this.position) < 1.65) {
       monster.windup += dt;
-      if (monster.windup >= .74) {
+      if (monster.windup >= enemyTiming.windup) {
         run.health -= this.balance.wrath.attackDamage;
-        this.resetMonster();
+        this.resetMonster(monster, 'attack');
         this.cancel();
         this.tell('Прислужник ударил по лодке.');
         if (run.health <= 0) this.finish('health');
@@ -355,6 +384,8 @@ export class Expedition extends Pond {
     for (const offset of blocked ? [turn * .76, turn * 1.48, turn * 2.15, -turn * .76, -turn * 1.48] : [0]) {
       const next = { x: monster.x + Math.cos(direction + offset) * step, z: monster.z + Math.sin(direction + offset) * step };
       if (!navigation.clear(monster, next, .3)) continue;
+      monster.heading = Math.PI / 2 - direction - offset;
+      monster.moving = true;
       Object.assign(monster, next);
       monster.steering = Math.sign(offset);
       break;
@@ -373,10 +404,10 @@ export class Expedition extends Pond {
     arrow.age = Math.min(arrow.travel, arrow.age + dt);
     const next = between(arrow.start, arrow.end, arrow.age / arrow.travel);
     const monster = this.monster;
-    const enemyHit = monster ? contact(previous, next, monster, .82) : Infinity;
+    const enemyHit = monster ? contact(previous, next, monster, enemyHitRadius) : Infinity;
     const obstruction = navigation.firstContact(previous, next);
     const hit = enemyHit <= 1 && enemyHit < obstruction;
-    if (hit) this.resetMonster();
+    if (hit && monster) this.resetMonster(monster, 'defeat');
     const at = Math.min(enemyHit, obstruction, 1);
     if (hit || obstruction <= 1 || arrow.age >= arrow.travel) {
       this.impact = { ...between(previous, next, at), age: 0, hit };
@@ -392,6 +423,7 @@ export class Expedition extends Pond {
       this.arrow = null;
       this.missedCast = null;
       this.monster = null;
+      this.monsterExit = null;
       return true;
     }
     if (this.missedCast) {
