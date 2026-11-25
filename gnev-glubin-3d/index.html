@@ -21,11 +21,12 @@
     </header>
 
     <section id="dock" aria-labelledby="dock-name">
-      <div class="place"><span class="eyebrow">Угодья Посейдона</span><h1 id="dock-name">Причал</h1><p id="dock-goal"></p></div>
-      <div class="dock-actions" role="group" aria-label="Действия на причале">
-        <button id="dock-shop" class="hotspot" data-action="shop"><span aria-hidden="true"></span> Лавка</button>
-        <button id="dock-boat" class="hotspot" data-action="map"><span aria-hidden="true"></span> Лодка</button>
+      <div class="place"><span class="eyebrow">Угодья Посейдона</span><h1 id="dock-name">Итака</h1><p id="dock-goal"></p><p id="dock-status" role="status">Загружаем Итаку…</p></div>
+      <div class="dock-actions" role="group" aria-label="Места на Итаке">
+        <button id="dock-shop" class="hotspot" type="button" data-action="shop" aria-haspopup="dialog" aria-controls="menu"><span aria-hidden="true"></span> Рыбная лавка</button>
+        <button id="dock-workshop" class="hotspot" type="button" data-action="workshop" aria-haspopup="dialog" aria-controls="menu"><span aria-hidden="true"></span> Мастерская</button>
         <button id="dock-polyphemus" class="hotspot" type="button" data-action="polyphemus" aria-haspopup="dialog" aria-controls="menu"><span aria-hidden="true"></span> Полифем</button>
+        <button id="dock-boat" class="hotspot" type="button" data-action="map" aria-haspopup="dialog" aria-controls="menu"><span aria-hidden="true"></span> Лодка</button>
       </div>
     </section>
 

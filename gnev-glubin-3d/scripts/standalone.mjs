@@ -6,6 +6,7 @@ const dist = new URL('../dist/', import.meta.url);
 const demoModels = ['boat', 'bobber', 'dock_deck', 'rod'];
 const gameBoatModels = ['blind-eye/boat', 'blind-eye/boat-oar', 'blind-eye/boat-sail-rig'];
 const gameEnemyModels = ['hippocamp', 'karkinos', 'charybdis', 'cretan-bull'].map(name => `enemies/${name}`);
+const ithacaModels = ['dock', 'ithaca_fish_stall', 'ithaca_workshop'].map(name => `ithaca/${name}`);
 const locations = ['moon-cistern', 'bronze-harbor'];
 
 async function inlinePngs(css, stylesheet) {
@@ -31,7 +32,7 @@ async function standalone(entry, output, assets = [], maps = []) {
     readFile(stylesheet, 'utf8').then(css => inlinePngs(css, stylesheet)),
     readFile(new URL('third-party-licenses.md', source), 'utf8'),
     Promise.all([...assets, ...maps.map(name => `locations/${name}`)].map(async path => {
-      const namedGroup = path.startsWith('blind-eye/') || path.startsWith('enemies/');
+      const namedGroup = path.startsWith('blind-eye/') || path.startsWith('enemies/') || path.startsWith('ithaca/');
       const basename = path.split('/').at(-1);
       const name = namedGroup ? path.replace('/', '-') : basename;
       const bytes = await readFile(new URL(`models/${path}.glb`, source));
@@ -56,7 +57,7 @@ async function standalone(entry, output, assets = [], maps = []) {
   console.log('Standalone browser build:', fileURLToPath(destination));
 }
 
-await standalone('index.html', 'gnev-glubin-3d.html', [...gameBoatModels, ...gameEnemyModels], locations);
+await standalone('index.html', 'gnev-glubin-3d.html', [...gameBoatModels, ...gameEnemyModels, ...ithacaModels], locations);
 await standalone('water/water-demo.html', 'gnev-glubin-water.html', demoModels);
 await standalone('watercolor/watercolor-demo.html', 'gnev-glubin-watercolor.html', demoModels);
 await standalone('water-lab/water-lab.html', 'gnev-glubin-water-lab.html', demoModels);

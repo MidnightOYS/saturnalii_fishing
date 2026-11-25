@@ -2,6 +2,8 @@ import './style.css';
 import './visual-inspector.css';
 import './hud-tide/theme.css';
 import './polyphemus/style.css';
+import './hud-tide/red-figure-tokens.css';
+import './ithaca.css';
 import { counter, fish, zones } from './rules/game.js';
 import { enemyNames, enemyTiming } from './enemies';
 import { Expedition } from './expedition';
@@ -19,7 +21,7 @@ const waterSaveKey = 'gnev-glubin-3d.water.v1';
 type Meta = InstanceType<typeof Expedition>['meta'];
 type FishId = keyof typeof fish;
 type Input = 'left' | 'right' | 'reel';
-type Menu = 'map' | 'shop' | 'result' | 'exit' | 'polyphemus';
+type Menu = 'map' | 'shop' | 'workshop' | 'result' | 'exit' | 'polyphemus';
 const locationInfo = {
   pond: { name: 'Лунный водосбор', description: 'Тихая вода у каменной цистерны. Первый косяк у пристани.' },
   temple: { name: 'Гавань затонувшего лика', description: 'Бронзовый лик под водой. Гнев растёт быстрее, редкий улов попадается чаще.' },
@@ -72,9 +74,13 @@ updateTouchLayout();
 const sceneHost = byId('scene');
 let scene: ReturnType<typeof createScene> | undefined;
 try {
-  scene = createScene(sceneHost, game, [byId('dock-shop'), byId('dock-boat')]);
+  scene = createScene(sceneHost, game, {
+    shop: byId('dock-shop'), workshop: byId('dock-workshop'),
+    polyphemus: byId('dock-polyphemus'), map: byId('dock-boat'),
+  });
 } catch (error) {
   byId('render-error').hidden = false;
+  byId('dock-status').textContent = '';
   console.warn('WebGL scene initialization failed', error);
 }
 
@@ -148,6 +154,7 @@ let selectedZone: LocationSlot = 'pond';
 let loadingLocation: AbortController | null = null;
 let mapNotice = '';
 let shopNotice = '';
+let workshopNotice = '';
 let shopSalesExpanded = false;
 let selectedStake = '';
 let paintPolyphemus: ReturnType<typeof bindPolyphemusFrame> | null = null;
@@ -171,7 +178,7 @@ function updateDock() {
   byId('xp').textContent = String(game.meta.xp);
   byId('dock-goal').textContent = game.meta.boat
     ? 'Парус установлен. Теперь можно выйти в Гавань затонувшего лика.'
-    : 'Выполни квоту в Лунном водосборе. Продай улов и купи парус, чтобы открыть Гавань затонувшего лика.';
+    : 'Выполни квоту в Лунном водосборе. Продай улов в рыбной лавке и купи парус в мастерской.';
 }
 
 function showDock() {
@@ -257,7 +264,7 @@ function renderMenu() {
   if (currentMenu === 'polyphemus') {
     menu.dataset.mode = 'polyphemus';
     if (parlor.round) {
-      menuContent.innerHTML = heading('Пари Полифема', 'Причал', false) + polyphemusRound(parlor.round);
+      menuContent.innerHTML = heading('Пари Полифема', 'Итака', false) + polyphemusRound(parlor.round);
       paintPolyphemus = bindPolyphemusFrame(menuContent);
       menuContent.querySelector<HTMLButtonElement>('[data-action="poly-cashout"]')?.focus();
     } else if (parlor.outcome) {
@@ -265,7 +272,7 @@ function renderMenu() {
       menuContent.innerHTML = heading(title, 'Пари Полифема') + polyphemusResult(parlor, game.meta.gold);
       menuContent.querySelector<HTMLButtonElement>('[data-action="poly-again"]')?.focus();
     } else {
-      menuContent.innerHTML = heading('Пари Полифема', 'Причал') + polyphemusSetup(parlor, game.meta.gold, selectedStake);
+      menuContent.innerHTML = heading('Пари Полифема', 'Итака') + polyphemusSetup(parlor, game.meta.gold, selectedStake);
     }
     return;
   }
@@ -279,7 +286,7 @@ function renderMenu() {
       const isLocked = id === 'temple' && !game.meta.boat;
       return `<button class="location" data-action="zone" data-id="${id}" data-locked="${isLocked}" aria-pressed="${selectedZone === id}" ${loadingLocation ? 'disabled' : ''}>
         <span class="eyebrow">${zone.number}</span><strong>${info.name}</strong>
-        <small>${info.description}</small>${isLocked ? '<p>Требуется парус из лавки</p>' : ''}</button>`;
+        <small>${info.description}</small>${isLocked ? '<p>Требуется парус из мастерской</p>' : ''}</button>`;
     }).join('');
     menuContent.innerHTML = `${heading('Выбор места', 'Лодка')}<div class="locations">${cards}</div>
       <div class="button-row"><span>Подношения · ${game.meta.offerings}</span>
@@ -291,13 +298,7 @@ function renderMenu() {
     const label = (item: typeof catchForSale[number]) => fish[item.id].name
       + (item.condition ? ` (${conditionNames[item.condition].toLowerCase()})` : '');
     const catchNames = catchForSale.map(item => `${label(item)} × ${item.count}`).join(' · ');
-    const upgrades = [
-      { id: 'boat', name: 'Парус для лодки', effect: 'Заменяет вёсла и открывает Гавань затонувшего лика.' },
-      { id: 'line', name: 'Крепкая леска', effect: 'Натяжение нарастает медленнее.' },
-      { id: 'offering', name: 'Подношение', effect: 'Снижает гнев до стадии Ярости.' }
-    ] as const;
-    menuContent.innerHTML = `${heading('Лавка', `Причал · ${game.meta.gold} др.`)}
-      <p class="panel-text">${game.meta.quotaMet ? 'Продай доставленный улов и выбери улучшение.' : 'Улучшения станут доступны после первой выполненной квоты.'}</p>
+    menuContent.innerHTML = `${heading('Рыбная лавка', `Итака · ${game.meta.gold} др.`)}
       <div class="menu-row"><div><strong>Улов на продажу</strong><small>${catchNames || 'Пока пусто'}</small></div>
       <button class="primary" data-action="sell" ${catchForSale.length ? '' : 'disabled'}>Продать · ${value} др.</button></div>
       ${catchForSale.length ? `<details class="harbor-fish-sales" ${shopSalesExpanded ? 'open' : ''}>
@@ -305,6 +306,15 @@ function renderMenu() {
           <span>${label(item)} · ${item.count} шт.</span><button type="button" data-action="sell-one"
           data-id="${stakeKey(item)}" aria-label="Продать одну · ${label(item)} · ${item.price} др.">+${item.price} др.</button></li>`).join('')}</ul>
       </details>` : ''}
+      <p id="shop-notice" role="status">${shopNotice}</p>`;
+  } else if (currentMenu === 'workshop') {
+    const upgrades = [
+      { id: 'boat', name: 'Парус для лодки', effect: 'Заменяет вёсла и открывает Гавань затонувшего лика.' },
+      { id: 'line', name: 'Крепкая леска', effect: 'Натяжение нарастает медленнее.' },
+      { id: 'offering', name: 'Подношение', effect: 'Снижает гнев до стадии Ярости.' }
+    ] as const;
+    menuContent.innerHTML = `${heading('Мастерская', `Итака · ${game.meta.gold} др.`)}
+      ${game.meta.quotaMet ? '' : '<p class="panel-text">Улучшения откроются после первой выполненной квоты.</p>'}
       ${upgrades.map(({ id, name, effect }) => {
         const cost = game.balance.economy[id];
         const bought = id !== 'offering' && game.meta[id];
@@ -314,7 +324,7 @@ function renderMenu() {
           <button data-action="buy" data-id="${id}" aria-label="${name} · ${status}"
           ${bought || fittingSail || !game.meta.quotaMet || game.meta.gold < cost ? 'disabled' : ''}>${status}</button></div>`;
       }).join('')}
-      <p id="shop-notice" role="status">${shopNotice}</p>`;
+      <p id="workshop-notice" role="status">${workshopNotice}</p>`;
   } else if (currentMenu === 'result' && game.result) {
     const result = game.result;
     const details: Record<string, string> = {
@@ -325,12 +335,12 @@ function renderMenu() {
     menuContent.innerHTML = `${heading(result.success ? 'Улов доставлен' : 'Вылазка сорвалась',
       locationInfo[result.zone as LocationSlot].name, false)}
       <div class="tide-result-art" data-outcome="${result.success ? 'success' : 'failure'}" aria-hidden="true"></div>
-      <p class="panel-text">${result.success ? 'Улов можно продать в лавке на причале.' : details[result.reason]}</p>
+      <p class="panel-text">${result.success ? 'Улов можно продать в рыбной лавке на Итаке.' : details[result.reason]}</p>
       <div class="report"><span><strong>${result.count + Number(!result.success && result.lostPending)}</strong>${result.success ? 'Рыб доставлено' : 'Рыб потеряно'}</span>
       <span><strong>${result.score} / ${game.balance.economy.quota}</strong>Квота</span>
       <span><strong>+${result.success ? result.xp : 0}</strong>Опыт</span>
       ${result.success ? `<span><strong>${result.value} др.</strong>Цена улова</span>` : ''}</div>
-      <div class="button-row"><button class="primary" data-action="close-menu">К причалу</button></div>`;
+      <div class="button-row"><button class="primary" data-action="close-menu">На Итаку</button></div>`;
   } else if (currentMenu === 'exit') {
     menuContent.innerHTML = `${heading('Вернуться раньше?', 'Квота не выполнена', false)}
       <p class="panel-text">Если уйти сейчас, улов и опыт этой вылазки пропадут.</p>
@@ -616,21 +626,21 @@ async function sail() {
 async function buySail() {
   if (!scene || fittingSail || game.meta.boat || !game.meta.quotaMet || game.meta.gold < game.balance.economy.boat) return;
   fittingSail = true;
-  shopNotice = 'Устанавливаем парус…';
+  workshopNotice = 'Устанавливаем парус…';
   renderMenu();
   try {
     await scene.prepareSail();
     if (!game.polyphemus.round && game.buy('boat')) {
-      shopNotice = 'Парус установлен. Гавань затонувшего лика открыта.';
+      workshopNotice = 'Парус установлен. Гавань затонувшего лика открыта.';
       save();
       updateDock();
     }
   } catch (error) {
-    shopNotice = 'Парус не загрузился. Попробуй купить его ещё раз.';
+    workshopNotice = 'Парус не загрузился. Попробуй купить его ещё раз.';
     console.warn('Sail model could not be loaded', error);
   } finally {
     fittingSail = false;
-    if (currentMenu === 'shop' || currentMenu === 'map') renderMenu();
+    if (currentMenu === 'workshop' || currentMenu === 'map') renderMenu();
   }
 }
 
@@ -658,6 +668,10 @@ function action(button: HTMLButtonElement) {
       shopNotice = '';
       shopSalesExpanded = false;
       showMenu('shop');
+      break;
+    case 'workshop':
+      workshopNotice = '';
+      showMenu('workshop');
       break;
     case 'polyphemus':
       if (!game.run && !game.result && !fittingSail) showMenu('polyphemus');
@@ -711,10 +725,11 @@ function action(button: HTMLButtonElement) {
       break;
     }
     case 'buy':
+      if (currentMenu !== 'workshop' || game.polyphemus.round) break;
       if (id === 'boat') {
         void buySail();
       } else if (id && game.buy(id)) {
-        shopNotice = 'Покупка сделана.';
+        workshopNotice = 'Покупка сделана.';
         save();
         updateDock();
         renderMenu();

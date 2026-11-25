@@ -1,0 +1,62 @@
+#game:not([data-expedition]) .vignette {
+  background: linear-gradient(#1c112749, transparent 30%, transparent 78%, #07171679);
+}
+
+#game #dock .dock-actions {
+  position: absolute;
+  inset: auto max(12px, env(safe-area-inset-right)) max(15px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: min(370px, calc(100% - 24px));
+  margin-inline: auto;
+  gap: 6px;
+}
+
+#game #dock .hotspot {
+  position: static;
+  justify-content: center;
+  min-height: 44px;
+  padding: 6px 10px;
+  transform: none;
+  background: var(--gd-bg-panel);
+  border-image: none;
+  border: 1px solid var(--gd-border-control);
+  border-radius: 4px;
+  color: var(--gd-fg-primary);
+  font: 600 .9rem/1.2 system-ui, sans-serif;
+}
+
+#game #dock .hotspot:hover {
+  background: var(--gd-selected-bg);
+  color: var(--gd-fg-primary);
+  border-color: var(--gd-selected-border);
+}
+
+#game #dock .hotspot:focus-visible {
+  outline-color: var(--gd-focus-outer);
+  box-shadow: 0 0 0 2px var(--gd-focus-inner);
+}
+
+#game #dock .hotspot > span {
+  width: 21px;
+  height: 21px;
+}
+
+#dock-workshop { --tide-icon: url('./hud-tide/art/sail.png'); }
+#dock-status { margin-top: 8px; }
+#dock-status:empty { display: none; }
+
+@media (min-width: 720px) and (min-aspect-ratio: 6/5) {
+  #game:not([data-mobile-controls]) #dock[data-ithaca="ready"] .dock-actions {
+    inset: 0;
+    display: block;
+    width: auto;
+  }
+
+  #game:not([data-mobile-controls]) #dock[data-ithaca="ready"] .hotspot {
+    position: absolute;
+    left: var(--ithaca-x);
+    top: var(--ithaca-y);
+    transform: translate(-50%, -50%);
+  }
+}

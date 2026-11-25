@@ -46,8 +46,6 @@ button { border: 1px solid var(--line); background: #112321ed; padding: 9px 14px
 button:hover:not(:disabled) { border-color: #eaca91aa; background: #29403a; }
 .hotspot { position: absolute; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 10px; white-space: nowrap; border-color: #bea77894; padding: 9px 16px; box-shadow: 0 5px 26px #051817a8; }
 .hotspot span { width: 8px; height: 8px; transform: rotate(45deg); border: 1px solid var(--gold); }
-#dock-shop { left: 43%; top: 48%; }
-#dock-boat { left: 66%; top: 66%; }
 #fishing { --wrath-color: #a8d1bd; outline: none; }
 #fishing[data-stage="2"] { --wrath-color: #c4afef; }
 #fishing[data-stage="3"] { --wrath-color: #f2a388; }
@@ -179,26 +177,6 @@ h2 { font-size: clamp(27px, 4vw, 42px); }
   left: var(--touch-left);
   max-width: min(360px, calc(100% - var(--touch-left) - var(--touch-right)));
 }
-#game[data-mobile-controls] .dock-actions {
-  position: absolute;
-  inset: auto var(--touch-right) var(--touch-bottom) var(--touch-left);
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-  width: min(365px, calc(100% - var(--touch-left) - var(--touch-right)));
-  margin-inline: auto;
-}
-#game[data-mobile-controls] #dock .hotspot {
-  position: static;
-  justify-content: center;
-  transform: none;
-  min-height: 48px;
-  padding-inline: 2px;
-  border-inline-width: 13px 8px;
-  font-size: .84rem;
-}
-#game[data-mobile-controls] .hotspot > span { width: 19px; height: 19px; }
-
 #game[data-mobile-controls] .fishing-status { top: var(--touch-top); left: var(--touch-left); }
 #game[data-mobile-controls] .readouts { gap: 3px; }
 #game[data-mobile-controls] .readouts > div {

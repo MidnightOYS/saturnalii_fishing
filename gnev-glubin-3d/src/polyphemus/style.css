@@ -1,7 +1,5 @@
 #dock-polyphemus {
   --tide-icon: url('../hud-tide/art/mullet.png');
-  left: clamp(100px, 23%, 540px);
-  top: 72%;
 }
 
 #game #menu[data-mode="polyphemus"] {
@@ -290,7 +288,6 @@
 .harbor-fish-sales li button { padding: 4px 8px; font-size: .8rem; white-space: nowrap; }
 
 @media (max-width: 600px) {
-  #dock-polyphemus { left: clamp(75px, 28%, 165px); top: 84%; }
 
   #game #menu[data-mode="polyphemus"] .panel-head { padding-block: 12px; }
   .poly-body { grid-template-columns: minmax(0, 1fr) minmax(110px, 34%); min-height: 302px; }

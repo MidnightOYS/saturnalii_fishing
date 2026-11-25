@@ -4,6 +4,7 @@ import { enemyTiming } from './enemies';
 import { createEnemyVisuals } from './enemy-visuals';
 import { createExpeditionLighting } from './expedition-light';
 import { between, distance, schoolLimit, schoolRadius, waterCamera, type Expedition, type Point } from './expedition';
+import { createIthacaSky, loadIthaca, type IthacaAction } from './ithaca';
 import { disposeLocation, type LoadedLocation } from './location-assets';
 import { createLocationEffects } from './location-environment';
 import { createGameWater } from './location-water';
@@ -28,6 +29,11 @@ function heightAt(x: number, z: number, time: number, amplitude: number) {
 const glslWaves = waves.map(wave =>
   `sin(p.x * (${wave.x}) + p.y * (${wave.z}) + uTime * ${wave.speed}) * ${wave.weight}`
 ).join(' + ');
+
+const ithacaPalette = {
+  sky: new T.Color('#7d7081'), deep: new T.Color('#10383a'), crest: new T.Color('#38655f'),
+  glint: new T.Color('#dbac7d'), fog: .008,
+};
 
 const palettes = [
   { sky: '#a8b3a0', deep: '#1e4945', crest: '#588879', glint: '#dbc591', amplitude: .11, fog: .022, sun: 2.3 },
@@ -58,54 +64,6 @@ function stone(group: T.Object3D, color: T.ColorRepresentation, x: number, y: nu
   result.scale.set(w, h, depth);
   result.rotation.y = x * .69;
   return result;
-}
-
-function lantern(group: T.Object3D, x: number, y: number, z: number) {
-  const lamp = new T.Mesh(new T.BoxGeometry(.31, .40, .28), new T.MeshBasicMaterial({ color: '#eeb66d' }));
-  lamp.position.set(x, y, z);
-  group.add(lamp);
-  box(group, '#533b29', x, y + .25, z, .42, .12, .42);
-  box(group, '#533b29', x, y - .24, z, .40, .10, .40);
-  const light = new T.PointLight('#ffba67', 14, 5, 2);
-  light.position.copy(lamp.position);
-  group.add(light);
-}
-
-function createDock() {
-  const dock = new T.Group();
-  const stall = new T.Group();
-  stall.position.set(-2.8, .55, -1.65);
-  dock.add(stall);
-  for (let i = 0; i < 28; i += 1) {
-    const z = -7.5 + i * .41;
-    box(dock, ['#7d6148', '#8b6b4e', '#947358', '#85654b'][i % 4], -2.4, .40, z, 5.25, .21, .39);
-  }
-  for (const x of [-4.83, .05]) {
-    for (const z of [-6, -2, 2.6]) {
-      cylinder(dock, '#59432f', x, .08, z, .23, 1.63);
-    }
-  }
-  for (const z of [-5.6, -3.0, -.45]) {
-    box(dock, '#554332', -4.04, .71, z, .9, .49, .74);
-  }
-  for (const x of [-1.7, 1.7]) {
-    for (const z of [-1.02, 1.02]) box(stall, '#594331', x, 1.18, z, .18, 2.36, .18);
-  }
-  box(stall, '#926c47', 0, .82, .79, 3.4, .17, .58);
-  box(stall, '#6d523c', 0, .36, .8, 2.8, .75, .38);
-  box(stall, '#526d5c', 0, 1.00, -1.05, 3.39, 1.93, .15);
-  for (const side of [-1, 1]) {
-    const roof = box(stall, '#935c43', 0, 2.39, side * .66, 4.12, .16, 1.48);
-    roof.rotation.x = side * .35;
-    box(stall, '#ae7650', 0, 2.17, side * 1.28, 4.12, .16, .12);
-  }
-  for (const x of [-1.22, -.77, .87, 1.19]) {
-    cylinder(stall, '#ae7b58', x, 1.10, .76, .18, .27, 7, .22);
-    cylinder(stall, '#80563f', x, 1.23, .76, .10, .09, 7);
-  }
-  lantern(stall, 1.75, 1.72, 1.13);
-  lantern(dock, -.55, 1.15, 2.35);
-  return { dock, stall };
 }
 
 function createBoat() {
@@ -139,23 +97,18 @@ function createBoat() {
   return boat;
 }
 
-function createTerrain() {
+function createHorizon() {
   const horizon = new T.Group();
-  const harbor = new T.Group();
-  for (let i = 0; i < 39; i += 1) {
-    const x = (i % 20 - 9.5) * 5.4;
-    const z = -34 - Math.floor(i / 20) * 17 - Math.abs(Math.sin(i * 56)) * 5;
-    stone(horizon, i % 2 ? '#526556' : '#607064', x, -.70, z, 6 + i % 4, 3.3 + i % 6, 6.9);
+  for (let i = 0; i < 24; i += 1) {
+    const x = (i % 12 - 5.5) * 13;
+    const z = -57 - Math.floor(i / 12) * 21 - Math.abs(Math.sin(i * 56)) * 7;
+    stone(horizon, i < 12 ? '#5d526c' : '#76617e', x, -.70, z, 13 + i % 4, 3.7 + i % 6, 6.9);
   }
-  for (let i = 0; i < 12; i += 1) {
-    const z = 5.2 - i * 2.35;
-    stone(harbor, i % 2 ? '#52645a' : '#6d7562', -6.9 + Math.sin(i * 1.7), .35, z, 3.8, 1.42 + .21 * (i % 4), 2.8);
-  }
-  return { horizon, harbor };
+  return horizon;
 }
 
 function waterSurface() {
-  const geometry = new T.PlaneGeometry(164, 124, 170, 154);
+  const geometry = new T.PlaneGeometry(224, 200, 192, 176);
   geometry.rotateX(-Math.PI / 2);
   const uniforms = {
     uTime: { value: 0 }, uAmplitude: { value: 0 }, uFog: { value: .02 },
@@ -185,15 +138,15 @@ function waterSurface() {
         float h = wave(p);
         vec3 normal = normalize(vec3(h - wave(p + vec2(0.13, 0.0)), 0.13, h - wave(p + vec2(0.0, 0.13))));
         vec3 eye = normalize(cameraPosition - vPoint);
-        vec3 sun = normalize(vec3(-0.46, 0.77, -0.45));
+        vec3 sun = normalize(vec3(-0.48, 0.17, -1.0));
         float fresnel = pow(1.0 - max(dot(eye, normal), 0.0), 3.5);
         float bands = sin(p.y * 4.1 + sin(p.x * 1.53 + uTime) * 1.18 + uTime * 1.05);
         float fine = sin(p.y * 11.4 + sin(p.x * 3.0 - uTime) * 2.1 - uTime * 1.6);
         float streak = smoothstep(0.84, 1.0, bands * 0.70 + fine * 0.3);
         float spec = pow(max(dot(normal, normalize(sun + eye)), 0.0), 19.0);
         vec3 color = mix(uDeep, uCrest, clamp(0.31 + fresnel * 0.6 + h * 0.28 + bands * 0.05, 0.0, 1.0));
-        color += uGlint * (spec * 0.35 + streak * (0.035 + fresnel * 0.06));
-        float dist = length(cameraPosition - vPoint) * uFog;
+        color += uGlint * (spec * 0.54 + streak * (0.035 + fresnel * 0.06));
+        float dist = max(0.0, length(cameraPosition - vPoint) - 35.0) * uFog;
         color = mix(color, uSky, 1.0 - exp(-dist * dist));
         gl_FragColor = vec4(color, 1.0);
         #include <tonemapping_fragment>
@@ -202,7 +155,7 @@ function waterSurface() {
     `
   });
   const water = new T.Mesh(geometry, material);
-  water.position.z = -36;
+  water.position.z = -45;
   return { water, uniforms };
 }
 
@@ -262,7 +215,9 @@ function sampleFlight(out: T.Vector3, start: T.Vector3, end: T.Vector3, lift: nu
   return out;
 }
 
-export function createScene(host: HTMLElement, game: Expedition, markers: HTMLElement[]) {
+export function createScene(host: HTMLElement, game: Expedition, markers: Record<IthacaAction, HTMLButtonElement>) {
+  const dockUI = markers.shop.closest<HTMLElement>('#dock')!;
+  const dockStatus = dockUI.querySelector<HTMLElement>('#dock-status')!;
   const gameRoot = host.closest('#game');
   const hasMobileControls = () => gameRoot?.hasAttribute('data-mobile-controls') ?? false;
   const renderer = new T.WebGLRenderer({ antialias: true, alpha: false });
@@ -287,10 +242,27 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
   scene.add(sun, ambient);
   const lighting = createExpeditionLighting(renderer, scene, fog, sun, ambient, sunDirection);
   const visualPost = createVisualPost(renderer);
+  const dockSun = new T.DirectionalLight('#ffc18e', 2.65);
+  dockSun.position.set(-39, 28, 17);
+  dockSun.target.position.set(2, 7, -12);
+  dockSun.castShadow = true;
+  dockSun.shadow.autoUpdate = false;
+  dockSun.shadow.mapSize.set(1024, 1024);
+  Object.assign(dockSun.shadow.camera, { left: -25, right: 25, top: 22, bottom: -22, near: 1, far: 85 });
+  dockSun.shadow.bias = -.00035;
+  dockSun.shadow.normalBias = .05;
+  scene.add(dockSun, dockSun.target);
 
   const { water, uniforms } = waterSurface();
-  const { dock, stall } = createDock();
-  const { horizon, harbor } = createTerrain();
+  const horizon = createHorizon();
+  const sky = createIthacaSky();
+  let ithaca: Awaited<ReturnType<typeof loadIthaca>> | undefined;
+  const mooringPositions = new T.BufferAttribute(new Float32Array(9), 3);
+  const mooring = new T.Line(
+    new T.BufferGeometry().setAttribute('position', mooringPositions),
+    new T.LineBasicMaterial({ color: '#64452f' }),
+  );
+  mooring.frustumCulled = false;
   const boat = createBoat();
   const fallbackParts = [...boat.children];
   let blindEye: BoatVisual | undefined;
@@ -386,7 +358,7 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
   const stringPositions = new T.BufferAttribute(new Float32Array(9), 3);
   weapon.add(new T.Line(new T.BufferGeometry().setAttribute('position', stringPositions),
     new T.LineBasicMaterial({ color: '#ead5a8' })));
-  scene.add(horizon, harbor, water, dock, boat, float, line, floatRipple,
+  scene.add(sky, horizon, water, mooring, boat, float, line, floatRipple,
     ...spots.map(marker => marker.root), bite.root, spray, weapon, feather, aimLine, crosshair, splash);
 
   const pick = new T.Raycaster();
@@ -413,14 +385,24 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
   }
 
   renderer.domElement.addEventListener('pointerup', event => {
-    if (game.run || game.result) return;
+    if (event.button !== 0 || game.run || game.result || !ithaca) return;
     rayAt(event.clientX, event.clientY);
-    for (const hit of pick.intersectObjects([stall, boat, dock], true)) {
-      let object: T.Object3D | null = hit.object;
-      while (object?.visible && object !== stall && object !== boat && object !== dock) object = object.parent;
-      if (!object?.visible) continue;
-      if (object === stall) markers[0].click();
-      if (object === boat) markers[1].click();
+    const { shop, workshop, polyphemus } = ithaca.targets;
+    for (const hit of pick.intersectObjects([ithaca.root, boat], true)) {
+      let action: IthacaAction | undefined;
+      let visible = true;
+      for (let object: T.Object3D | null = hit.object; object; object = object.parent) {
+        visible &&= object.visible;
+        if (object === shop) action = 'shop';
+        if (object === workshop) action = 'workshop';
+        if (object === polyphemus) action = 'polyphemus';
+        if (object === boat) action = 'map';
+      }
+      if (!visible) continue;
+      if (action) {
+        markers[action].focus({ preventScroll: true });
+        markers[action].click();
+      }
       break;
     }
   });
@@ -504,13 +486,13 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
     waterMode = mode;
     waterSettings = settings;
   }
-  const fixedCamera = new T.Vector3(9.8, 7.7, 12.6);
-  const harborLook = new T.Vector3(-.4, .1, -2.2);
   const navigationFollow = new T.Vector3();
   const boatAt = new T.Vector3();
   const fishingLook = new T.Vector3();
   const look = new T.Vector3();
   const proj = new T.Vector3();
+  const ropeEnd = new T.Vector3();
+  const markersByAction = Object.entries(markers) as [IthacaAction, HTMLButtonElement][];
   const target = new T.Vector3();
   const anchor = new T.Vector3();
   const flightStart = new T.Vector3();
@@ -518,8 +500,6 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
   const arcPoint = new T.Vector3();
   const arrowOrigin = new T.Vector3();
   const arrowDirection = new T.Vector3();
-  let width = 0;
-  let height = 0;
   let wasFirstPerson = false;
 
   function resizeExpeditionCamera() {
@@ -530,16 +510,26 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
   }
 
   function resize() {
-    width = Math.max(1, host.clientWidth);
-    height = Math.max(1, host.clientHeight);
+    const width = Math.max(1, host.clientWidth);
+    const height = Math.max(1, host.clientHeight);
     dockCamera.aspect = width / height;
-    dockCamera.fov = width < 820 ? 53 : 44;
-    if (hasMobileControls()) {
-      const minimumHorizontalFov = T.MathUtils.degToRad(36);
-      const verticalFov = 2 * Math.atan(Math.tan(minimumHorizontalFov / 2) / dockCamera.aspect);
-      dockCamera.fov = Math.max(dockCamera.fov, T.MathUtils.radToDeg(verticalFov));
+    if (ithaca) {
+      const halfWidth = Math.tan(T.MathUtils.degToRad(ithaca.horizontalFov / 2));
+      const halfHeight = halfWidth / ithaca.referenceAspect;
+      const portraitPadding = T.MathUtils.lerp(.82, 1, T.MathUtils.smoothstep(dockCamera.aspect, .85, 1.45));
+      dockCamera.fov = T.MathUtils.radToDeg(2 * Math.atan(Math.max(
+        halfHeight, halfWidth * portraitPadding / dockCamera.aspect,
+      )));
     }
     dockCamera.updateProjectionMatrix();
+    if (ithaca) {
+      dockCamera.updateMatrixWorld();
+      for (const [action, marker] of markersByAction) {
+        proj.copy(ithaca.labels[action]).project(dockCamera);
+        marker.style.setProperty('--ithaca-x', `${(proj.x + 1) * 50}%`);
+        marker.style.setProperty('--ithaca-y', `${(1 - proj.y) * 50}%`);
+      }
+    }
     fishingCamera.aspect = dockCamera.aspect;
     fishingCamera.updateProjectionMatrix();
     resizeExpeditionCamera();
@@ -547,6 +537,20 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
   }
   new ResizeObserver(resize).observe(host);
   resize();
+  void loadIthaca().then(hub => {
+    ithaca = hub;
+    scene.add(hub.root);
+    dockCamera.position.copy(hub.cameraFrom);
+    dockCamera.lookAt(hub.cameraTarget);
+    sky.position.copy(hub.cameraFrom);
+    dockSun.shadow.needsUpdate = true;
+    resize();
+    dockStatus.textContent = '';
+    dockUI.dataset.ithaca = 'ready';
+  }).catch(error => {
+    dockStatus.textContent = 'Итака не загрузилась. Обнови страницу, чтобы повторить.';
+    console.warn('Ithaca models could not be loaded', error);
+  });
 
   function update(dt: number, boatSpeed = 0) {
     time += dt;
@@ -569,7 +573,7 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
     const blend = visualStage - low;
     const a = palettes[low];
     const b = palettes[Math.min(low + 1, 2)];
-    const amplitude = T.MathUtils.lerp(a.amplitude, b.amplitude, blend);
+    const amplitude = atDock ? .055 : T.MathUtils.lerp(a.amplitude, b.amplitude, blend);
     uniforms.uTime.value = time;
     uniforms.uAmplitude.value = amplitude;
     uniforms.uFog.value = T.MathUtils.lerp(a.fog, b.fog, blend);
@@ -577,18 +581,34 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
     uniforms.uDeep.value.copy(a.deep).lerp(b.deep, blend);
     uniforms.uCrest.value.copy(a.crest).lerp(b.crest, blend);
     uniforms.uGlint.value.copy(a.glint).lerp(b.glint, blend);
+    if (atDock) {
+      uniforms.uSky.value.copy(ithacaPalette.sky);
+      uniforms.uDeep.value.copy(ithacaPalette.deep);
+      uniforms.uCrest.value.copy(ithacaPalette.crest);
+      uniforms.uGlint.value.copy(ithacaPalette.glint);
+      uniforms.uFog.value = ithacaPalette.fog;
+    }
     fog.color.copy(uniforms.uSky.value);
     fog.density = uniforms.uFog.value;
     sun.intensity = T.MathUtils.lerp(a.sun, b.sun, blend);
 
-    ambient.intensity = atDock ? 1.65 : T.MathUtils.lerp(1.65, .68, visualStage / 2);
+    sun.visible = !atDock;
+    dockSun.visible = atDock && Boolean(ithaca);
+    ambient.intensity = atDock ? 1.30 : T.MathUtils.lerp(1.65, .68, visualStage / 2);
+    if (atDock) {
+      ambient.color.set('#ccd4e0');
+      ambient.groundColor.set('#6b5960');
+      if (dockSun.visible && dockSun.shadow.needsUpdate) renderer.shadowMap.needsUpdate = true;
+    }
     lighting.update(visualStage, visualTuning);
     (scene.background as T.Color).copy(fog.color);
-    dock.visible = harbor.visible = horizon.visible = atDock;
-    water.visible = atDock;
-    const bx = run ? game.position.x : 1.58;
-    const bz = run ? game.position.z : .8;
-    const heading = run ? game.heading : -.24;
+    sky.visible = horizon.visible = water.visible = atDock;
+    if (ithaca) ithaca.root.visible = mooring.visible = atDock;
+    else mooring.visible = false;
+    boat.visible = Boolean(run || ithaca);
+    const bx = run ? game.position.x : ithaca?.boatPosition.x ?? 0;
+    const bz = run ? game.position.z : ithaca?.boatPosition.z ?? 0;
+    const heading = run ? game.heading : ithaca?.boatHeading ?? 0;
     const dx = Math.sin(heading);
     const dz = Math.cos(heading);
     const monster = run ? game.monster : null;
@@ -612,7 +632,8 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
     const surface = locationWater
       ? (x: number, z: number) => locationWater.heightAt(x, z)
       : (x: number, z: number) => heightAt(x, z, time, amplitude);
-    boat.position.set(bx, .12 + surface(bx, bz), bz);
+    boat.position.set(bx, (run ? .12 : ithaca?.boatPosition.y ?? 0) + surface(bx, bz), bz);
+    if (blindEye) blindEye.root.position.y = run ? .16 : 0;
     boat.rotation.set(
       Math.atan2(surface(bx - dx * 1.3, bz - dz * 1.3) - surface(bx + dx * 1.3, bz + dz * 1.3), 2.6),
       heading,
@@ -650,8 +671,15 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
       navigationFollow.lerp(boatAt, 1 - Math.exp(-dt * 8));
     }
     if (atDock) {
-      camera.position.copy(fixedCamera);
-      camera.lookAt(harborLook);
+      if (ithaca) {
+        ithaca.update(time);
+        const start = ithaca.mooringPier;
+        const end = boat.localToWorld(ropeEnd.copy(ithaca.mooringBoat));
+        mooringPositions.setXYZ(0, start.x, start.y, start.z);
+        mooringPositions.setXYZ(1, (start.x + end.x) * .5, (start.y + end.y) * .5 - .06, (start.z + end.z) * .5);
+        mooringPositions.setXYZ(2, end.x, end.y, end.z);
+        mooringPositions.needsUpdate = true;
+      }
     } else if (firstPerson) {
       const lookAhead = T.MathUtils.clamp(lookRange, 2.1, 7);
       fishingCamera.position.set(bx + dx * .55, 1.47 + (boat.position.y - .12) * .65, bz + dz * .55);
@@ -682,16 +710,6 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
     wasFirstPerson = firstPerson;
     camera.updateMatrixWorld();
     activeLocation?.effects.update(time, visualStage, surface, visualTuning);
-
-    for (const [index, marker] of markers.entries()) {
-      if (!atDock) break;
-      proj.copy(index === 0 ? stall.position : boat.position);
-      proj.y += index === 0 ? 1.9 : .88;
-      proj.project(camera);
-      const labelOffset = index === 1 ? Math.min(width * .12, 140) : 0;
-      marker.style.left = `${T.MathUtils.clamp((proj.x + 1) * width / 2 + labelOffset, 55, width - 55)}px`;
-      marker.style.top = `${T.MathUtils.clamp((1 - proj.y) * height / 2, height * .29, height * .86)}px`;
-    }
 
     const signalGain = visualTuning.signals;
     const castPreview = run && game.drawing && !game.aiming ? game.castPreview : null;
