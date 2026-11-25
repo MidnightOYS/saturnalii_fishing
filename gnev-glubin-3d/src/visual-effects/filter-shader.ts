@@ -21,7 +21,7 @@ float sfNoise(vec2 p) {
 
 vec3 sfSample(vec2 uv) {
   vec2 edge = uPixel * .5;
-  return texture2D(uFrame, clamp(uv, edge, vec2(1.) - edge)).rgb;
+  return sampleFrame(clamp(uv, edge, vec2(1.) - edge));
 }
 
 vec3 sfDisplay(vec3 color) {
@@ -160,6 +160,9 @@ vec3 visualFilter(vec3 sceneColor, vec2 uv) {
     return sceneColor;
   }
   grade = max(vec3(0.), grade);
-  return mix(sceneColor, grade * grade, strength);
+  // Blend in the same display-like space used by the presets, so bright
+  // grades don't jump out of the shadows at the first slider step.
+  vec3 blended = mix(source, grade, strength);
+  return blended * blended;
 }
 `;

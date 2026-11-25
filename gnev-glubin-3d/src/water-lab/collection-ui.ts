@@ -3,6 +3,7 @@
 import labStyle from './ui.css?inline';
 import collectionStyle from './collection-ui.css?inline';
 import gameStyle from './collection-game.css?inline';
+import { downloadJson } from '../download-json';
 import {
   collectionPresets, colorNames, defaultCollection, definitions, effectNames, modeGroups, rangesFor,
   readCollection, switchesFor, wrathControl, type CollectionSnapshot, type LabSettings, type Mode, type Range,
@@ -284,14 +285,7 @@ export function makeLabUI(onChange: (mode: Mode, settings: LabSettings, snapshot
     pause.onclick = () => setPaused(!snapshot.paused);
   }
   find<HTMLButtonElement>('.lab-export').onclick = () => {
-    const url = URL.createObjectURL(new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' }));
-    const link = element('a');
-    link.href = url;
-    link.download = 'gnev-glubin-water-collection-' + snapshot.mode + '.json';
-    document.body.append(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+    downloadJson('gnev-glubin-water-collection-' + snapshot.mode + '.json', snapshot);
     transfer.value = 'Настройки готовы к передаче';
   };
   find<HTMLButtonElement>('.lab-import').onclick = () => file.click();

@@ -88,10 +88,6 @@ const menu = byId<HTMLDialogElement>('menu');
 const waterInspector = byId('game-water-inspector');
 const waterSettingsToggle = byId<HTMLButtonElement>('water-settings-toggle');
 if (scene) {
-  makeVisualInspector(waterInspector, tuning => {
-    scene?.setVisualTuning(tuning);
-    byId('game').style.setProperty('--expedition-vignette', String(tuning.vignette));
-  });
   let profile = defaultCollection(true);
   try {
     const saved = localStorage.getItem(waterSaveKey);
@@ -100,7 +96,7 @@ if (scene) {
     // Use the collection defaults if settings cannot be read.
   }
   scene.selectWater(profile.mode, profile.modes[profile.mode]);
-  makeLabUI((mode, settings, snapshot) => {
+  const waterControls = makeLabUI((mode, settings, snapshot) => {
     scene?.selectWater(mode, settings);
     try {
       localStorage.setItem(waterSaveKey, JSON.stringify(snapshot));
@@ -108,6 +104,10 @@ if (scene) {
       // Settings still apply to the current session.
     }
   }, undefined, { root: byId('game-water-controls'), initial: profile, game: true });
+  makeVisualInspector(waterInspector, tuning => {
+    scene?.setVisualTuning(tuning);
+    byId('game').style.setProperty('--expedition-vignette', String(tuning.vignette));
+  }, waterControls.getSnapshot);
 } else {
   waterSettingsToggle.disabled = true;
 }

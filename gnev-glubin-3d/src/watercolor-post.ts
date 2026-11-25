@@ -136,9 +136,10 @@ export function createWatercolorPost() {
     return result;
   }
 
-  function render(renderer: T.WebGLRenderer, scene: T.Scene, camera: T.Camera, options: WatercolorSettings, captureDepth = false) {
+  function render(renderer: T.WebGLRenderer, scene: T.Scene, camera: T.Camera, options: WatercolorSettings,
+    captureDepth = false, draw = () => renderer.render(scene, camera)) {
     if (!options.enabled || !(options.brush || options.grain || options.relief)) {
-      renderer.render(scene, camera);
+      draw();
       return;
     }
 

@@ -241,7 +241,7 @@ export function createScene(host: HTMLElement, game: Expedition, markers: Record
   const ambient = new T.HemisphereLight('#e0e1c8', '#4f6c64', 1.65);
   scene.add(sun, ambient);
   const lighting = createExpeditionLighting(renderer, scene, fog, sun, ambient, sunDirection);
-  const visualPost = createVisualPost(renderer);
+  const visualPost = createVisualPost(renderer, scene);
   const dockSun = new T.DirectionalLight('#ffc18e', 2.65);
   dockSun.position.set(-39, 28, 17);
   dockSun.target.position.set(2, 7, -12);
@@ -893,12 +893,13 @@ export function createScene(host: HTMLElement, game: Expedition, markers: Record
       boat: boat.position, headingX: dx, headingZ: dz, wind: waterSettings.wind,
       bobber: float.visible ? float.position : null,
     }, captureDepth => {
+      const draw = () => visualPost.drawScene(camera);
       if (!locationWater) {
-        renderer.render(scene, camera);
+        draw();
         return;
       }
       let depth: T.DepthTexture | undefined;
-      lighting.render(camera, () => { depth = locationWater.renderScene(camera, captureDepth); });
+      lighting.render(camera, () => { depth = locationWater.renderScene(camera, captureDepth, draw); });
       return depth;
     });
     if (atDock && ithaca && !dockUI.dataset.ithaca) {

@@ -104,12 +104,25 @@
 .visual-slider input { grid-column: 1 / -1; width: 100%; margin: 1px 0 0; accent-color: var(--inspector-accent); cursor: pointer; }
 .visual-inspector-footer {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
+  gap: 6px;
   padding: 9px 15px;
   border-top: 1px solid var(--inspector-edge);
   background: #101a1b;
 }
 .visual-inspector-footer button { min-height: 32px; border-radius: 6px; color: #bdcfc6; font-size: .76rem; }
+.visual-inspector-footer #visual-export {
+  background: var(--gd-action-bg);
+  color: var(--gd-action-fg);
+}
+.visual-inspector-footer #visual-export:hover { background: var(--gd-action-hover); }
+.visual-inspector-footer #visual-export:active { background: var(--gd-action-pressed); }
+.visual-inspector-footer #visual-export:focus-visible {
+  outline: 2px solid var(--gd-focus-outer);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--gd-focus-inner);
+}
 @media (max-width: 600px) {
   #game[data-expedition] #game-water-inspector { width: calc(100% - 2 * var(--hud-inset)); }
 }

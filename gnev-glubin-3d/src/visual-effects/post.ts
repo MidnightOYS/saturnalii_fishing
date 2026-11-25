@@ -14,6 +14,14 @@ const vertexShader = /* glsl */ `
   }
 `;
 
+// XR targets store the shader's sRGB output in a raw texture. Decode it for effect math.
+const decodeFrame = /* glsl */ `
+  vec3 frameLinear(vec3 color) {
+    return mix(pow((color + .055) / 1.055, vec3(2.4)), color / 12.92,
+      vec3(lessThanEqual(color, vec3(.04045))));
+  }
+`;
+
 const microFragment = /* glsl */ `
   uniform sampler2D uFrame, uDepth, uCoast;
   uniform mat4 uInverseViewProjection;
@@ -22,6 +30,8 @@ const microFragment = /* glsl */ `
   uniform vec2 uBoat, uHeading, uPixel, uWind, uAnchor, uBobber;
   uniform float uTime, uStage, uPerspective, uHasBobber;
   varying vec2 vUv;
+
+  ${decodeFrame}
 
   float hash(vec2 p) {
     p = fract(p * vec2(123.34, 456.21));
@@ -49,12 +59,11 @@ const microFragment = /* glsl */ `
   ${microShader}
 
   void main() {
-    vec3 base = texture2D(uFrame, vUv).rgb;
+    vec3 base = frameLinear(texture2D(uFrame, vUv).rgb);
     vec3 world = positionAt(vUv, texture2D(uDepth, vUv).x);
     vec3 color = applyMicroFx(base, world, 1. - smoothstep(.10, 1., uStage),
       smoothstep(.22, 1., uStage), uTime);
     gl_FragColor = vec4(max(color, vec3(0.)), 1.);
-    #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
 `;
@@ -62,13 +71,18 @@ const microFragment = /* glsl */ `
 const filterFragment = /* glsl */ `
   uniform sampler2D uFrame;
   uniform vec2 uPixel;
+  uniform bool uFrameIsSRGB;
   varying vec2 vUv;
+  ${decodeFrame}
+  vec3 sampleFrame(vec2 uv) {
+    vec3 color = texture2D(uFrame, uv).rgb;
+    return uFrameIsSRGB ? frameLinear(color) : color;
+  }
   ${screenFilterShader}
 
   void main() {
-    vec3 color = texture2D(uFrame, vUv).rgb;
+    vec3 color = sampleFrame(vUv);
     gl_FragColor = vec4(visualFilter(color, vUv), 1.);
-    #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
 `;
@@ -86,7 +100,7 @@ type Frame = {
   wind: number;
 };
 
-export function createVisualPost(renderer: T.WebGLRenderer) {
+export function createVisualPost(renderer: T.WebGLRenderer, scene: T.Scene) {
   const screen = new T.Scene();
   const screenCamera = new T.Camera();
   const geometry = new T.BufferGeometry();
@@ -107,15 +121,15 @@ export function createVisualPost(renderer: T.WebGLRenderer) {
   };
   const filter = {
     uFrame: { value: null as T.Texture | null }, uPixel: pixel,
-    uFilter: { value: 0 }, uFilterAmount: { value: 0 }
+    uFilter: { value: 0 }, uFilterAmount: { value: 0 }, uFrameIsSRGB: { value: false },
   };
   const microMaterial = new T.ShaderMaterial({
     name: 'Expedition micro effects', uniforms: micro, vertexShader, fragmentShader: microFragment,
-    depthTest: false, depthWrite: false,
+    depthTest: false, depthWrite: false, toneMapped: false,
   });
   const filterMaterial = new T.ShaderMaterial({
     name: 'Expedition screen filters', uniforms: filter, vertexShader, fragmentShader: filterFragment,
-    depthTest: false, depthWrite: false, extensions: { derivatives: true },
+    depthTest: false, depthWrite: false, toneMapped: false, extensions: { derivatives: true },
   });
   const triangle = new T.Mesh(geometry, microMaterial);
   triangle.frustumCulled = false;
@@ -127,14 +141,48 @@ export function createVisualPost(renderer: T.WebGLRenderer) {
   const hdr = renderer.capabilities.isWebGL2
     ? renderer.extensions.has('EXT_color_buffer_float') || renderer.extensions.has('EXT_color_buffer_half_float')
     : renderer.extensions.has('EXT_color_buffer_half_float') && renderer.extensions.has('OES_texture_half_float_linear');
+  const sceneSamples = getSceneSamples();
+  const displayBackground = new T.Color();
+  const displayFog = new T.Color();
   let sceneTarget: T.WebGLRenderTarget | undefined;
   let detailTarget: T.WebGLRenderTarget | undefined;
 
-  function makeTarget(depthBuffer: boolean) {
+  function getSceneSamples() {
+    if (!renderer.capabilities.isWebGL2) return 0;
+    const gl = renderer.getContext() as WebGL2RenderingContext;
+    const samples = gl.getInternalformatParameter(gl.RENDERBUFFER, gl.RGBA8, gl.SAMPLES) as Int32Array;
+    const canvasSamples = gl.getParameter(gl.SAMPLES) as number;
+    return samples.find(count => count <= canvasSamples) ?? 0;
+  }
+
+  function makeTarget(captureScene: boolean) {
     return new T.WebGLRenderTarget(size.x, size.y, {
-      type: hdr ? T.HalfFloatType : T.UnsignedByteType, colorSpace: T.LinearSRGBColorSpace,
-      depthBuffer, stencilBuffer: false, generateMipmaps: false,
+      type: !captureScene && hdr ? T.HalfFloatType : T.UnsignedByteType,
+      colorSpace: captureScene ? T.SRGBColorSpace : T.LinearSRGBColorSpace,
+      internalFormat: captureScene && renderer.capabilities.isWebGL2 ? 'RGBA8' : undefined,
+      depthBuffer: captureScene, stencilBuffer: false, generateMipmaps: false,
+      samples: captureScene ? sceneSamples : 0,
     });
+  }
+
+  function drawScene(camera: T.Camera) {
+    if (!sceneTarget || renderer.getRenderTarget() !== sceneTarget) {
+      renderer.render(scene, camera);
+      return;
+    }
+    // Three r160 still uploads solid backgrounds and built-in fog in linear
+    // space for offscreen targets, even when their shaders output sRGB.
+    const background = scene.background;
+    const fog = scene.fog;
+    const fogColor = fog?.color;
+    if (background instanceof T.Color) scene.background = displayBackground.copy(background).convertLinearToSRGB();
+    if (fog && fogColor) fog.color = displayFog.copy(fogColor).convertLinearToSRGB();
+    try {
+      renderer.render(scene, camera);
+    } finally {
+      scene.background = background;
+      if (fog && fogColor) fog.color = fogColor;
+    }
   }
 
   function drawPass(material: T.ShaderMaterial) {
@@ -157,7 +205,9 @@ export function createVisualPost(renderer: T.WebGLRenderer) {
     renderer.getDrawingBufferSize(size);
     size.set(Math.max(1, size.x), Math.max(1, size.y));
     pixel.value.set(1 / size.x, 1 / size.y);
-    sceneTarget ??= makeTarget(true);
+    // In Three r160 the XR flag preserves canvas tone mapping and output color
+    // space for each material, including how transparent materials blend.
+    sceneTarget ??= Object.assign(makeTarget(true), { isXRRenderTarget: true });
     sceneTarget.setSize(size.x, size.y);
     if (useMicro && !sceneTarget.depthTexture) {
       sceneTarget.dispose();
@@ -216,10 +266,11 @@ export function createVisualPost(renderer: T.WebGLRenderer) {
     }
 
     filter.uFrame.value = result;
+    filter.uFrameIsSRGB.value = result === sceneTarget.texture;
     filter.uFilter.value = filterIndex + 1;
     filter.uFilterAmount.value = filterAmount;
     drawPass(filterMaterial);
   }
 
-  return { render };
+  return { render, drawScene };
 }

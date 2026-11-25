@@ -1,5 +1,7 @@
+import { downloadJson } from './download-json';
 import { readVisualTuning, type VisualGain, type VisualTuning } from './visual-tuning';
 import { microEffects, screenFilters, type ScreenFilterId } from './visual-effects/presets';
+import type { CollectionSnapshot } from './water-lab/collection-settings';
 
 const saveKey = 'gnev-glubin-3d.visual.v1';
 const tabs = ['Вода', 'Свет и туман', 'Эффекты', 'Микродетали', 'Фильтры'] as const;
@@ -24,7 +26,8 @@ const signals: Field[] = [
   { key: 'vignette', label: 'Виньетка', hint: 'Мягкое затемнение краёв' }
 ];
 
-export function makeVisualInspector(root: HTMLElement, apply: (settings: VisualTuning) => void) {
+export function makeVisualInspector(root: HTMLElement, apply: (settings: VisualTuning) => void,
+  readWater: () => CollectionSnapshot) {
   let settings = readVisualTuning();
   try {
     const saved = localStorage.getItem(saveKey);
@@ -42,7 +45,7 @@ export function makeVisualInspector(root: HTMLElement, apply: (settings: VisualT
     scroll.append(panel);
   }
   const panels = [...root.querySelectorAll<HTMLElement>('[role=tabpanel]')];
-  const footer = root.querySelector<HTMLElement>('.visual-inspector-footer')!;
+  const reset = root.querySelector<HTMLButtonElement>('#visual-reset')!;
   const stage = root.querySelector<HTMLSelectElement>('#visual-stage')!;
   const tint = root.querySelector<HTMLInputElement>('#visual-sky-tint')!;
   const syncFields: Array<() => void> = [];
@@ -75,7 +78,7 @@ export function makeVisualInspector(root: HTMLElement, apply: (settings: VisualT
       tab.tabIndex = selected ? 0 : -1;
       panels[tabIndex].hidden = !selected;
     }
-    footer.hidden = index === 0;
+    reset.hidden = index === 0;
     scroll.scrollTop = 0;
   }
 
@@ -198,10 +201,18 @@ export function makeVisualInspector(root: HTMLElement, apply: (settings: VisualT
     settings.skyTint = tint.value;
     save();
   });
-  root.querySelector('#visual-reset')!.addEventListener('click', () => {
+  reset.addEventListener('click', () => {
     settings = readVisualTuning();
     sync();
     save();
+  });
+  root.querySelector('#visual-export')!.addEventListener('click', () => {
+    downloadJson('gnev-glubin-visual-inspector.json', {
+      schema: 'gnev-glubin-visual-inspector',
+      version: 1,
+      water: readWater(),
+      visual: settings,
+    });
   });
   selectTab(0);
   sync();

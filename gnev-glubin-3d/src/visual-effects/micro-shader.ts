@@ -74,7 +74,7 @@ vec3 microRefract(vec3 color, vec3 world, float amount, float t, float mask, flo
   vec2 waterHit = hit.xz + ray.xz * microPlaneOffset(hit, ray, 0.);
   float adjacentWater = microWaterCoverage(hit, ray, microCoast(waterHit))
     * mix(1., smoothstep(.55, 1.75, length(waterHit - uBobber)), uHasBobber);
-  vec3 shift = texture2D(uFrame, uv).rgb - texture2D(uFrame, vUv).rgb;
+  vec3 shift = frameLinear(texture2D(uFrame, uv).rgb) - frameLinear(texture2D(uFrame, vUv).rgb);
   color += shift * adjacentWater * mask * min(1., amount * .90) * quietZone;
   vec2 floorP = microPlane(world, -.86) + warp * .31;
   float a = sin(dot(floorP, vec2(4.27, 1.39)) - t * 1.71);
