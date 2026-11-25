@@ -63,7 +63,7 @@ class Pond {
       hotspotAge: 0,
       /** @type {Cast | null} */
       cast: null,
-      selected: null, rod: 0,
+      selected: /** @type {keyof typeof fish | null} */ (null), rod: 0,
       /** @type {Cargo[]} */
       cargo: [],
       /** @type {Cargo | null} */

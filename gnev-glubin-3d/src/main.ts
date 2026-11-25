@@ -58,6 +58,17 @@ function readProgress(): Partial<Meta> {
 }
 
 const game = new Expedition(readProgress());
+const gameRoot = byId('game');
+const touchLayout = matchMedia('(pointer: coarse) and (max-width: 900px), (pointer: coarse) and (max-height: 540px) and (orientation: landscape)');
+const { bandStart, bandEnd } = game.balance.bite;
+function updateTouchLayout() {
+  const mobile = touchLayout.matches;
+  gameRoot.toggleAttribute('data-mobile-controls', mobile);
+  // A wider visible timing band makes the hook practical with a thumb tap.
+  game.balance.bite.bandStart = mobile ? bandStart - .08 : bandStart;
+  game.balance.bite.bandEnd = mobile ? bandEnd + .08 : bandEnd;
+}
+updateTouchLayout();
 const sceneHost = byId('scene');
 let scene: ReturnType<typeof createScene> | undefined;
 try {
@@ -96,7 +107,6 @@ if (scene) {
 }
 const menuContent = byId('menu-content');
 const water = byId('fishing');
-const gameRoot = byId('game');
 const gameHeader = byId('game-header');
 const zoneIntro = byId('zone-intro');
 const hold = byId('hold');
@@ -112,6 +122,8 @@ const hud = {
   fight: byId('fight'), tension: byId<HTMLProgressElement>('tension'), tensionNumber: byId('tension-number'),
   distance: byId<HTMLProgressElement>('distance'), distanceNumber: byId('distance-number'), attack: byId('attack'),
   bow: byId<HTMLButtonElement>('bow-button'), bowMeter: byId('bow-meter'), draw: byId<HTMLProgressElement>('bow-draw'),
+  mobileCast: byId<HTMLButtonElement>('mobile-cast'), mobileBow: byId<HTMLButtonElement>('mobile-bow'),
+  mobileFish: byId<HTMLButtonElement>('mobile-fish-action'), mobileSteer: byId('mobile-steer'),
   castMeter: byId('cast-meter'), castCharge: byId<HTMLProgressElement>('cast-charge'), castDistance: byId('cast-distance'),
   offeringButton: water.querySelector<HTMLButtonElement>('[data-action="offering"]')!,
   holdButton: water.querySelector<HTMLButtonElement>('[data-action="hold"]')!,
@@ -119,6 +131,7 @@ const hud = {
 };
 
 const keys = new Map<string, Input>();
+const touchKeys = new Map<number, Input>();
 const inputKeys: Partial<Record<string, Input>> = {
   KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right', Space: 'reel'
 };
@@ -127,6 +140,8 @@ const helmKeys: Partial<Record<string, string>> = {
 };
 let drawPointer: number | null = null;
 let pointer: { clientX: number; clientY: number } | null = null;
+let waterTap: { id: number; x: number; y: number } | null = null;
+let mobileCastArmed = false;
 const stages = ['Тихая вода', 'Знамение', 'Ярость'];
 let currentMenu: Menu | null = null;
 let selectedZone: LocationSlot = 'pond';
@@ -168,11 +183,15 @@ function showDock() {
 
 function clearInputs() {
   keys.clear();
+  touchKeys.clear();
   game.inputs.clear();
   game.helm.clear();
+  game.clearMoveTarget();
   game.abortDraw();
   drawPointer = null;
   pointer = null;
+  waterTap = null;
+  mobileCastArmed = false;
 }
 
 function toggleWaterInspector() {
@@ -353,14 +372,30 @@ function renderWater() {
   }
   hud.bow.disabled = phase === 'surge';
   hud.bow.setAttribute('aria-pressed', String(game.aiming));
-  hud.bowMeter.hidden = !game.aiming;
+  const mobile = touchLayout.matches;
+  if (phase !== 'ready') mobileCastArmed = false;
+  hud.mobileCast.disabled = phase !== 'ready';
+  hud.mobileCast.setAttribute('aria-pressed', String(mobileCastArmed));
+  hud.mobileBow.disabled = phase === 'surge' || Boolean(game.arrow);
+  hud.mobileBow.setAttribute('aria-pressed', String(game.aiming));
+  hud.mobileFish.hidden = !mobile || game.aiming || (phase !== 'hook' && phase !== 'reel');
+  hud.mobileSteer.hidden = !mobile || game.aiming || phase !== 'struggle';
+  if (!hud.mobileFish.hidden) setText(hud.mobileFish, phase === 'hook' ? 'Подсечь' : 'Подматывать');
+  for (const [id, input] of touchKeys) {
+    if (input === 'reel' ? hud.mobileFish.hidden || phase !== 'reel' : hud.mobileSteer.hidden) {
+      touchKeys.delete(id);
+      syncKeys();
+    }
+  }
+  hud.bowMeter.hidden = !game.aiming || mobile;
   paintMeter(hud.draw, game.charge);
   hud.castMeter.hidden = game.aiming || !game.drawing;
   if (!hud.castMeter.hidden) {
     paintMeter(hud.castCharge, game.charge);
     const preview = game.castPreview;
     const range = preview ? Math.hypot(preview.point.x - game.position.x, preview.point.z - game.position.z) : 0;
-    setText(hud.castDistance, `${range.toFixed(1)} м`);
+    const specialSchool = preview?.school?.expiresAt !== undefined;
+    setText(hud.castDistance, specialSchool ? `${range.toFixed(1)} м · Особый косяк` : `${range.toFixed(1)} м`);
   }
   sceneHost.classList.toggle('aiming', game.aiming || (!game.firstPerson && phase === 'ready' && hold.hidden));
   hud.timing.hidden = game.aiming || phase !== 'hook';
@@ -382,11 +417,25 @@ function renderWater() {
   }
 
   const direction = counter[run.direction as keyof typeof counter];
-  const label = `${phase}|${phase === 'struggle' ? direction : ''}|${game.aiming}|${game.drawing}|${hasCast}`;
+  const label = `${phase}|${phase === 'struggle' ? direction : ''}|${game.aiming}|${game.drawing}|${hasCast}|${mobile}|${mobileCastArmed}`;
   if (label === lastPhaseLabel) return;
   lastPhaseLabel = label;
   hud.phase.dataset.phase = phase;
   hud.phase.dataset.counter = phase === 'struggle' ? direction : '';
+  if (mobile) {
+    const hints: Record<string, string> = {
+      ready: mobileCastArmed ? 'Коснись воды у косяка' : 'Коснись воды, чтобы направить лодку',
+      cast: 'Поплавок в полёте',
+      wait: 'Следи за поплавком',
+      hook: 'Подсеки в зелёной зоне',
+      struggle: direction === 'left' ? 'Удерживай ←' : 'Удерживай →',
+      reel: 'Удерживай «Подматывать»',
+      pack: 'Рыба поймана',
+      surge: 'Последняя волна',
+    };
+    hud.phase.textContent = game.aiming ? 'Коснись цели, чтобы выстрелить' : hints[phase];
+    return;
+  }
   const descriptions: Record<string, string> = {
     ready: game.drawing
       ? '<strong>Отпусти <kbd>ЛКМ</kbd>, когда кольцо попадёт в косяк</strong>'
@@ -680,6 +729,20 @@ function action(button: HTMLButtonElement) {
     case 'bow':
       toggleBow();
       break;
+    case 'mobile-cast': {
+      if (!touchLayout.matches || game.run?.phase !== 'ready') break;
+      const arm = !mobileCastArmed;
+      if (game.aiming) toggleBow();
+      clearInputs();
+      mobileCastArmed = arm;
+      break;
+    }
+    case 'mobile-bow':
+      if (touchLayout.matches) toggleBow();
+      break;
+    case 'mobile-fish-action':
+      if (touchLayout.matches && hold.hidden) game.primary();
+      break;
     case 'return':
       if (game.score >= game.balance.economy.quota) game.finish();
       else showMenu('exit');
@@ -756,6 +819,33 @@ menu.addEventListener('cancel', event => {
 function syncKeys() {
   game.inputs.clear();
   for (const input of keys.values()) game.inputs.add(input);
+  for (const input of touchKeys.values()) game.inputs.add(input);
+}
+
+function holdFishingInput(button: HTMLElement, input: Input) {
+  button.addEventListener('pointerdown', event => {
+    const phase = game.run?.phase;
+    if (!touchLayout.matches || event.button !== 0 || game.aiming || menu.open || !hold.hidden
+      || phase !== (input === 'reel' ? 'reel' : 'struggle')) return;
+    event.preventDefault();
+    touchKeys.set(event.pointerId, input);
+    syncKeys();
+    button.setPointerCapture(event.pointerId);
+  });
+  for (const kind of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) {
+    button.addEventListener(kind, event => {
+      if (touchKeys.delete(event.pointerId)) syncKeys();
+    });
+  }
+}
+hud.mobileFish.addEventListener('pointerdown', event => {
+  if (!touchLayout.matches || event.button !== 0 || game.run?.phase !== 'hook' || !hold.hidden || menu.open) return;
+  event.preventDefault();
+  action(hud.mobileFish);
+});
+holdFishingInput(hud.mobileFish, 'reel');
+for (const direction of ['left', 'right'] as const) {
+  holdFishingInput(hud.mobileSteer.querySelector<HTMLElement>(`[data-mobile-control="${direction}"]`)!, direction);
 }
 
 document.addEventListener('keydown', event => {
@@ -821,6 +911,13 @@ document.addEventListener('keyup', event => {
 });
 sceneHost.addEventListener('pointerdown', event => {
   if (event.button !== 0 || !scene || menu.open || !hold.hidden || drawPointer !== null) return;
+  if (touchLayout.matches) {
+    if (!event.isPrimary || !waterInspector.hidden || !game.run || (!game.aiming && game.run.phase !== 'ready')) return;
+    event.preventDefault();
+    waterTap = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    sceneHost.setPointerCapture(event.pointerId);
+    return;
+  }
   if (!(game.aiming ? game.beginDraw() : game.beginCast())) return;
   event.preventDefault();
   zoneIntro.hidden = true;
@@ -831,11 +928,38 @@ sceneHost.addEventListener('pointerdown', event => {
   sceneHost.setPointerCapture(event.pointerId);
 });
 sceneHost.addEventListener('pointermove', event => {
+  if (touchLayout.matches) {
+    if (waterTap?.id === event.pointerId && Math.hypot(event.clientX - waterTap.x, event.clientY - waterTap.y) > 16) waterTap = null;
+    return;
+  }
   if ((!game.aiming && !game.drawing) || (drawPointer !== null && event.pointerId !== drawPointer)) return;
   pointer = event;
   game.target = scene?.pointAt(event.clientX, event.clientY, game.aiming) ?? null;
 });
 sceneHost.addEventListener('pointerup', event => {
+  if (touchLayout.matches) {
+    if (waterTap?.id !== event.pointerId) return;
+    const tap = waterTap;
+    waterTap = null;
+    if (!game.run || menu.open || !hold.hidden || !waterInspector.hidden || !scene
+      || Math.hypot(event.clientX - tap.x, event.clientY - tap.y) > 16) return;
+    const target = scene.pointAt(event.clientX, event.clientY, game.aiming);
+    if (!target) return;
+    zoneIntro.hidden = true;
+    if (game.aiming) {
+      if (game.shootAt(target)) toggleBow();
+    } else if (mobileCastArmed) {
+      if (game.castAt(target)) {
+        hasCast = true;
+        mobileCastArmed = false;
+      }
+    } else {
+      game.setMoveTarget(target);
+    }
+    processEvents();
+    renderWater();
+    return;
+  }
   if (drawPointer !== event.pointerId) return;
   drawPointer = null;
   game.target = scene?.pointAt(event.clientX, event.clientY, game.aiming) ?? null;
@@ -847,13 +971,19 @@ sceneHost.addEventListener('pointerup', event => {
   processEvents();
   renderWater();
 });
-for (const kind of ['pointercancel', 'lostpointercapture']) {
+for (const kind of ['pointercancel', 'lostpointercapture'] as const) {
   sceneHost.addEventListener(kind, event => {
-    if ((event as PointerEvent).pointerId !== drawPointer) return;
+    if (waterTap?.id === event.pointerId) waterTap = null;
+    if (event.pointerId !== drawPointer) return;
     drawPointer = null;
     game.abortDraw();
   });
 }
+touchLayout.addEventListener('change', () => {
+  updateTouchLayout();
+  clearInputs();
+  renderWater();
+});
 window.addEventListener('blur', clearInputs);
 document.addEventListener('visibilitychange', () => {
   clearInputs();

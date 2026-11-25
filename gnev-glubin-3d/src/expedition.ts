@@ -4,13 +4,16 @@ import { Polyphemus, readPolyphemusSave, type PolyphemusSave } from './polyphemu
 import { LocationNavigation, worldHeading, worldPoint, type LocationLayout, type Point } from './location-navigation';
 
 export type { Point } from './location-navigation';
-type School = Point & { id: number };
+type School = Point & { id: number; expiresAt?: number };
 type Arrow = { start: Point; end: Point; age: number; travel: number };
 type MissedCast = { start: Point; end: Point; age: number };
 type Impact = Point & { hit: boolean; age: number };
 
 export const waterCamera = { x: 11, y: 19, z: 19 };
 export const schoolRadius = 1.15;
+const ordinarySchoolLimit = 4;
+export const schoolLimit = ordinarySchoolLimit + 1;
+const specialSchool = { firstAt: 28, lifetime: 16, cooldown: 28, spawnRetry: 3, enemyChance: .4 };
 const castReach = 10;
 const castMinimum = 2.2;
 const castChargeTime = 1.08;
@@ -75,7 +78,9 @@ export class Expedition extends Pond {
   target: Point | null = null;
   arrow: Arrow | null = null;
   impact: Impact | null = null;
+  private moveTarget: Point | null = null;
   private schoolTimer = 0;
+  private nextSpecialSchoolAt = specialSchool.firstAt;
   private monsterTimer = 0;
   private monsterIndex = 0;
   private schoolId = 1;
@@ -97,7 +102,10 @@ export class Expedition extends Pond {
 
   get castPreview() {
     const point = this.chargedPoint(castMinimum, castReach);
-    if (!point) return null;
+    return point ? this.previewCastAt(point) : null;
+  }
+
+  private previewCastAt(point: Point) {
     const open = this.navigation?.clear(this.position, point) ?? false;
     const school = open ? this.schools.reduce<School | null>((nearest, school) => {
       const range = distance(point, school);
@@ -110,8 +118,22 @@ export class Expedition extends Pond {
     return this.chargedPoint(1.1, reach);
   }
 
+  setMoveTarget(point: Point): boolean {
+    if (this.run?.phase !== 'ready' || this.aiming || this.drawing
+      || !Number.isFinite(point.x) || !Number.isFinite(point.z) || !this.navigation?.clear(point, point)) return false;
+    this.moveTarget = { ...point };
+    return true;
+  }
+
+  clearMoveTarget(): void {
+    if (!this.moveTarget) return;
+    this.moveTarget = null;
+    this.velocity = { x: 0, z: 0 };
+  }
+
   beginCast() {
     if (this.run?.phase !== 'ready' || this.aiming || this.drawing) return false;
+    this.clearMoveTarget();
     this.drawing = true;
     this.charge = 0;
     this.castChargeAge = 0;
@@ -121,25 +143,58 @@ export class Expedition extends Pond {
 
   releaseCast() {
     if (!this.drawing || this.aiming || this.run?.phase !== 'ready') return;
-    const preview = this.castPreview;
+    const point = this.chargedPoint(castMinimum, castReach);
     this.abortDraw();
-    if (!preview?.open) {
-      if (preview) this.tell('Заброс перекрыт. Выбери открытый участок воды.');
-      return;
+    if (point) this.launchCast(point);
+  }
+
+  castAt(point: Point): boolean {
+    if (this.run?.phase !== 'ready' || this.aiming || this.drawing) return false;
+    const range = distance(this.position, point);
+    if (!Number.isFinite(range)) return false;
+    if (range >= castMinimum && range <= castReach) return this.launchCast({ ...point });
+
+    // Tapping the edge of a reachable school can fall just outside the rod's range.
+    const { school } = this.previewCastAt(point);
+    if (school) {
+      const schoolRange = distance(this.position, school);
+      if (schoolRange >= castMinimum && schoolRange <= castReach) {
+        return this.launchCast({ x: school.x, z: school.z });
+      }
     }
-    const { point, school } = preview;
+    this.tell(range < castMinimum ? 'Цель слишком близко для заброса.' : 'Цель вне дальности заброса.');
+    return false;
+  }
+
+  private launchCast(point: Point): boolean {
+    const run = this.run;
+    if (run?.phase !== 'ready') return false;
+    const { open, school } = this.previewCastAt(point);
+    if (!open) {
+      this.tell('Заброс перекрыт. Выбери открытый участок воды.');
+      return false;
+    }
+    this.clearMoveTarget();
+    this.velocity = { x: 0, z: 0 };
     if (!school) {
       this.missedCast = { start: { ...this.position }, end: point, age: 0 };
       this.tell('Заброс мимо рыбного места.');
-      return;
+      return true;
     }
     this.missedCast = null;
     this.castPoint = point;
     this.fishingSpot = school;
     this.turnBoatTowards(Math.atan2(this.position.x - point.x, this.position.z - point.z), 1);
     this.cast({ angle: 0, depth: .52 });
-    if (this.run.cast) this.run.cast.hasBite = true;
-    this.run.distance = distance(this.position, point);
+    if (run.cast) run.cast.hasBite = true;
+    if (school.expiresAt !== undefined) {
+      run.selected = 'crown';
+      this.tell('Особый косяк. Ловля может привлечь прислужника.');
+    } else if (run.selected === 'crown') {
+      run.selected = this.random() < this.balance.loot.viperShare ? 'viper' : 'oracle';
+    }
+    run.distance = distance(this.position, point);
+    return true;
   }
 
   override start(id: string, layout?: LocationLayout) {
@@ -182,6 +237,7 @@ export class Expedition extends Pond {
     this.position = spawn.position;
     this.heading = spawn.heading;
     this.helm.clear();
+    this.clearMoveTarget();
     this.velocity = { x: 0, z: 0 };
     this.schoolId = 1;
     this.schools = [{ ...firstSchool, id: this.schoolId++ }];
@@ -197,6 +253,7 @@ export class Expedition extends Pond {
     this.arrow = null;
     this.impact = null;
     this.schoolTimer = 7;
+    this.nextSpecialSchoolAt = specialSchool.firstAt;
     this.monsterTimer = this.balance.wrath.firstAttack;
     this.replenishSchool();
     this.replenishSchool();
@@ -206,6 +263,7 @@ export class Expedition extends Pond {
   override finish(reason = 'return') {
     super.finish(reason);
     if (this.run || !this.returnPose) return;
+    this.clearMoveTarget();
     if (reason === 'return') {
       this.position = this.returnPose.position;
       this.heading = this.returnPose.heading;
@@ -219,21 +277,47 @@ export class Expedition extends Pond {
     // The 3D expedition owns persistent schools in world space.
   }
 
-  private replenishSchool() {
+  private replenishSchool(expiresAt?: number): boolean {
     const navigation = this.navigation;
-    if (!navigation) return;
+    if (!navigation) return false;
     const available = this.schoolSites.filter(site => this.schools.every(school => distance(site, school) > schoolRadius * 2));
     const nearby = available.filter(site => {
       const range = distance(this.position, site);
       return range >= castMinimum && range <= castReach && navigation.clear(this.position, site);
     });
-    const options = nearby.length ? nearby : available;
+    const options = nearby.length || expiresAt !== undefined ? nearby : available;
+    if (!options.length) return false;
     const site = options[Math.floor(this.random() * options.length)];
-    if (site) this.schools.push({ ...site, id: this.schoolId++ });
+    this.schools.push({ ...site, id: this.schoolId++, expiresAt });
+    return true;
+  }
+
+  private updateSpecialSchool() {
+    const run = this.run;
+    if (!run) return;
+    const expired = this.schools.findIndex(school => school.expiresAt !== undefined && run.time >= school.expiresAt);
+    if (expired >= 0) this.schools.splice(expired, 1);
+    if (run.time < this.nextSpecialSchoolAt || run.phase !== 'ready') return;
+
+    const expiresAt = run.time + specialSchool.lifetime;
+    if (!this.replenishSchool(expiresAt)) {
+      this.nextSpecialSchoolAt = run.time + specialSchool.spawnRetry;
+      return;
+    }
+    this.nextSpecialSchoolAt = expiresAt + specialSchool.cooldown;
+    this.tell('Появился фиолетовый косяк. Здесь можно выловить Венец глубин и привлечь прислужника.', 5);
   }
 
   override primary() {
     if (this.run?.phase === 'hook' && !this.aiming) super.primary();
+  }
+
+  override hook() {
+    super.hook();
+    if (this.run?.phase === 'struggle' && this.fishingSpot?.expiresAt !== undefined
+      && !this.monster && this.random() < specialSchool.enemyChance) {
+      this.spawnMonster(true);
+    }
   }
 
   override miss(message: string, sound?: string) {
@@ -252,6 +336,7 @@ export class Expedition extends Pond {
 
   toggleBow() {
     if (!this.run || this.run.phase === 'surge') return;
+    this.clearMoveTarget();
     this.aiming = !this.aiming;
     this.abortDraw();
     if (this.aiming && this.run.cast) this.cancel();
@@ -275,13 +360,33 @@ export class Expedition extends Pond {
     if (!this.drawing) return;
     const end = this.shotEnd;
     if (end && this.charge >= .12) {
-      this.arrow = { start: { ...this.position }, end, age: 0, travel: .15 + distance(this.position, end) * .026 };
+      this.launchArrow(end);
     } else {
       this.tell('Удерживай ЛКМ, чтобы натянуть лук.');
     }
     const pointer = this.target;
     this.abortDraw();
     this.target = pointer;
+  }
+
+  shootAt(point: Point): boolean {
+    if (!this.aiming || this.drawing || this.arrow || !this.run || this.run.phase === 'surge') return false;
+    const range = distance(this.position, point);
+    if (!Number.isFinite(range)) return false;
+    if (range > reach) {
+      this.tell('Цель вне дальности лука.');
+      return false;
+    }
+    if (!this.navigation?.clear(point, point)) {
+      this.tell('Выбери цель на воде.');
+      return false;
+    }
+    this.launchArrow({ ...point });
+    return true;
+  }
+
+  private launchArrow(end: Point) {
+    this.arrow = { start: { ...this.position }, end, age: 0, travel: .15 + distance(this.position, end) * .026 };
   }
 
   private moveBoat(dt: number) {
@@ -291,23 +396,49 @@ export class Expedition extends Pond {
     const side = Number(this.helm.has('east')) - Number(this.helm.has('west'));
     const north = Number(this.helm.has('north')) - Number(this.helm.has('south'));
     const speed = this.drawing ? 2 : 4.65;
-    const scale = speed / (Math.hypot(side, north) || 1) / Math.hypot(waterCamera.x, waterCamera.z);
+    if (side || north) this.clearMoveTarget();
     const ease = 1 - Math.exp(-dt * 9);
+    if (this.moveTarget) {
+      const target = this.moveTarget;
+      const range = distance(this.position, target);
+      if (range <= .08) {
+        this.clearMoveTarget();
+        return;
+      }
+      const currentSpeed = Math.hypot(this.velocity.x, this.velocity.z);
+      const nextSpeed = currentSpeed + (speed - currentSpeed) * ease;
+      const direction = { x: (target.x - this.position.x) / range, z: (target.z - this.position.z) / range };
+      const next = between(this.position, target, Math.min(1, nextSpeed * dt / range));
+      if (!this.shiftBoat(next, navigation)) {
+        this.clearMoveTarget();
+        return;
+      }
+      this.velocity = { x: direction.x * nextSpeed, z: direction.z * nextSpeed };
+      this.turnBoatTowards(Math.atan2(-direction.x, -direction.z), Math.min(1, dt * 10));
+      return;
+    }
+
+    const scale = speed / (Math.hypot(side, north) || 1) / Math.hypot(waterCamera.x, waterCamera.z);
     this.velocity.x += ((side * waterCamera.z - north * waterCamera.x) * scale - this.velocity.x) * ease;
     this.velocity.z += ((-side * waterCamera.x - north * waterCamera.z) * scale - this.velocity.z) * ease;
     for (const axis of ['x', 'z'] as const) {
       const next = { ...this.position, [axis]: this.position[axis] + this.velocity[axis] * dt };
       if (!this.velocity[axis]) continue;
-      const [bow, stern] = hullSpine(this.position, this.heading);
-      const [nextBow, nextStern] = hullSpine(next, this.heading);
-      // The frame's sweep is checked at the two ends and across the destination hull.
-      if (navigation.clear(bow, nextBow, boatClearance) && navigation.clear(stern, nextStern, boatClearance)
-        && navigation.clear(nextBow, nextStern, boatClearance)) this.position = next;
-      else this.velocity[axis] = 0;
+      if (!this.shiftBoat(next, navigation)) this.velocity[axis] = 0;
     }
     if (Math.hypot(this.velocity.x, this.velocity.z) > .25) {
       this.turnBoatTowards(Math.atan2(-this.velocity.x, -this.velocity.z), Math.min(1, dt * 10));
     }
+  }
+
+  private shiftBoat(next: Point, navigation: LocationNavigation): boolean {
+    const [bow, stern] = hullSpine(this.position, this.heading);
+    const [nextBow, nextStern] = hullSpine(next, this.heading);
+    // The frame's sweep is checked at the two ends and across the destination hull.
+    if (!navigation.clear(bow, nextBow, boatClearance) || !navigation.clear(stern, nextStern, boatClearance)
+      || !navigation.clear(nextBow, nextStern, boatClearance)) return false;
+    this.position = next;
+    return true;
   }
 
   private turnBoatTowards(heading: number, ease: number) {
@@ -327,26 +458,30 @@ export class Expedition extends Pond {
     }
   }
 
-  private spawnMonster() {
+  private spawnMonster(fromSpecialSchool = false) {
     const navigation = this.navigation;
     const run = this.run;
     if (!navigation || !run) return;
     const lineup = enemyLineup[run.zone.id as keyof typeof enemyLineup];
     const offset = this.random() * Math.PI * 2;
-    for (let i = 0; i < 12; i += 1) {
-      const angle = offset + i * Math.PI / 6;
-      const point = { x: this.position.x + Math.cos(angle) * 8.5, z: this.position.z + Math.sin(angle) * 8.5 };
-      if (!navigation.clear(point, point, .45) || !navigation.clear(point, this.position, .3)) continue;
-      const kind = lineup[this.monsterIndex % lineup.length];
-      this.monsterIndex += 1;
-      this.monster = {
-        ...point, kind, age: 0, windup: 0, steering: 0, moving: false,
-        heading: Math.atan2(this.position.x - point.x, this.position.z - point.z),
-      };
-      this.tell(`Из воды поднялся прислужник Посейдона — ${enemyNames[kind]}. Достань лук.`);
-      return;
+    for (const range of fromSpecialSchool ? [8.5, 6] : [8.5]) {
+      for (let i = 0; i < 12; i += 1) {
+        const angle = offset + i * Math.PI / 6;
+        const point = { x: this.position.x + Math.cos(angle) * range, z: this.position.z + Math.sin(angle) * range };
+        if (!navigation.clear(point, point, .45) || !navigation.clear(point, this.position, .3)) continue;
+        const kind = lineup[this.monsterIndex % lineup.length];
+        this.monsterIndex += 1;
+        this.monster = {
+          ...point, kind, age: 0, windup: 0, steering: 0, moving: false,
+          heading: Math.atan2(this.position.x - point.x, this.position.z - point.z),
+        };
+        this.tell(fromSpecialSchool
+          ? `Особый косяк привлёк прислужника — ${enemyNames[kind]}. Достань лук.`
+          : `Из воды поднялся прислужник Посейдона — ${enemyNames[kind]}. Достань лук.`);
+        return;
+      }
     }
-    this.monsterTimer = 1;
+    if (!fromSpecialSchool) this.monsterTimer = 1;
   }
 
   private resetMonster(monster: EnemyEncounter, clip: EnemyExit['clip']) {
@@ -418,6 +553,7 @@ export class Expedition extends Pond {
 
   override updateThreat(dt: number) {
     if (this.advanceWrath(dt)) {
+      this.clearMoveTarget();
       this.aiming = false;
       this.abortDraw();
       this.arrow = null;
@@ -438,9 +574,10 @@ export class Expedition extends Pond {
       }
     }
     this.moveBoat(dt);
+    this.updateSpecialSchool();
     this.schoolTimer -= dt;
     if (this.schoolTimer <= 0) {
-      if (this.schools.length < 4) this.replenishSchool();
+      if (this.schools.filter(school => school.expiresAt === undefined).length < ordinarySchoolLimit) this.replenishSchool();
       this.schoolTimer = 9;
     }
     this.updateArrow(dt);

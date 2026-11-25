@@ -139,3 +139,197 @@ h2 { font-size: clamp(27px, 4vw, 42px); }
 #scene.aiming { cursor: crosshair; }
 #bow-button[aria-pressed="true"] { background: #634c33; border-color: #d6b77c; }
 #bow-meter, #cast-meter { grid-template-columns: 1fr; }
+
+.mobile-water-controls { display: none; }
+
+#game[data-mobile-controls] {
+  --hud-inset: 10px;
+  --touch-left: max(var(--hud-inset), env(safe-area-inset-left));
+  --touch-right: max(var(--hud-inset), env(safe-area-inset-right));
+  --touch-top: max(8px, env(safe-area-inset-top));
+  --touch-bottom: max(10px, env(safe-area-inset-bottom));
+  min-height: 0;
+  -webkit-text-size-adjust: 100%;
+}
+#game[data-mobile-controls] kbd,
+#game[data-mobile-controls] #bow-button { display: none; }
+#game[data-mobile-controls] button { touch-action: manipulation; }
+#game[data-mobile-controls] :is(#scene, .mobile-water-controls button) {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+#game[data-mobile-controls] .top {
+  padding: var(--touch-top) var(--touch-right) 0 var(--touch-left);
+}
+#game[data-mobile-controls][data-expedition] .top {
+  inset: var(--touch-top) var(--touch-right) auto auto;
+  padding: 0;
+}
+#game[data-mobile-controls] .wordmark {
+  width: clamp(110px, 33vw, 195px);
+  height: 48px;
+  padding: 12px 4px 0 9px;
+}
+#game[data-mobile-controls]:not([data-expedition]) .status { margin-top: 0; }
+#game[data-mobile-controls] #dock .place {
+  top: calc(var(--touch-top) + 56px);
+  left: var(--touch-left);
+  max-width: min(360px, calc(100% - var(--touch-left) - var(--touch-right)));
+}
+#game[data-mobile-controls] .dock-actions {
+  position: absolute;
+  inset: auto var(--touch-right) var(--touch-bottom) var(--touch-left);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  width: min(365px, calc(100% - var(--touch-left) - var(--touch-right)));
+  margin-inline: auto;
+}
+#game[data-mobile-controls] #dock .hotspot {
+  position: static;
+  justify-content: center;
+  transform: none;
+  min-height: 48px;
+  padding-inline: 2px;
+  border-inline-width: 13px 8px;
+  font-size: .84rem;
+}
+#game[data-mobile-controls] .hotspot > span { width: 19px; height: 19px; }
+
+#game[data-mobile-controls] .fishing-status { top: var(--touch-top); left: var(--touch-left); }
+#game[data-mobile-controls] .readouts { gap: 3px; }
+#game[data-mobile-controls] .readouts > div {
+  padding: 4px 3px 4px 17px;
+  border-inline-width: 5px;
+  font-size: .69rem;
+}
+#game[data-mobile-controls] .readouts > div::before { width: 16px; height: 16px; left: -1px; }
+#game[data-mobile-controls] .readouts strong { font-size: .88rem; }
+#game[data-mobile-controls] .wrath-status { min-width: 106px; }
+#game[data-mobile-controls] .readouts .tide-meter { min-width: 70px; }
+#game[data-mobile-controls] .water-actions {
+  top: calc(var(--touch-top) + 48px);
+  right: var(--touch-right);
+  left: auto;
+}
+#game[data-mobile-controls] :is(.water-actions > button, #water-settings-toggle, .panel-head > button,
+  .button-row > button, .cargo-actions > button, .menu-row > button, .water-settings-close) {
+  min-height: 44px;
+  min-width: 44px;
+}
+#game[data-mobile-controls] .zone-intro { margin-top: 8px; }
+#game[data-mobile-controls] #attack {
+  top: calc(var(--touch-top) + 64px);
+  left: var(--touch-left);
+  transform: none;
+  width: max-content;
+  max-width: calc(100% - var(--touch-left) - var(--touch-right));
+}
+#game[data-mobile-controls] .fishing-bottom {
+  bottom: calc(var(--touch-bottom) + 52px);
+  left: calc(50% + (var(--touch-left) - var(--touch-right)) / 2);
+  width: min(430px, calc(100% - var(--touch-left) - var(--touch-right)));
+}
+#game[data-mobile-controls] .phase {
+  min-height: 0;
+  border: solid transparent;
+  border-width: 5px 8px;
+  border-image: var(--tide-bezel) 7 15 7 15 fill stretch;
+  background: none;
+  padding: 4px 8px;
+  gap: 3px 8px;
+}
+#game[data-mobile-controls] .phase strong { font-size: 1.01rem; }
+#game[data-mobile-controls] .phase span { font-size: .78rem; }
+#game[data-mobile-controls] :is(.fight, .timing) { max-width: 100%; }
+
+#game[data-mobile-controls] .mobile-water-controls {
+  position: absolute;
+  inset: auto var(--touch-right) var(--touch-bottom) var(--touch-left);
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 6px;
+}
+#mobile-steer, .mobile-water-actions { display: flex; gap: 5px; }
+.mobile-water-actions { margin-inline-start: auto; }
+#game[data-mobile-controls] .mobile-water-controls button {
+  min-width: 44px;
+  min-height: 44px;
+  border-color: #b995688c;
+  border-radius: 7px;
+  padding: 4px 8px;
+  background: #102222f2;
+  color: var(--tide-text);
+  font-size: .81rem;
+  font-weight: 650;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px #0008;
+}
+#game[data-mobile-controls] #mobile-steer button { font-size: 1.25rem; }
+#game[data-mobile-controls] :is(#mobile-cast, #mobile-fish-action):not(:disabled) { color: var(--tide-gold); }
+#game[data-mobile-controls] .mobile-water-controls button:is([aria-pressed="true"], :active):not(:disabled) {
+  background: #6a4e2b;
+  border-color: #ffcb78;
+  color: #fff2d7;
+}
+
+#game[data-mobile-controls] :is(#menu, #hold) {
+  max-height: calc(100dvh - var(--touch-top) - var(--touch-bottom));
+  overscroll-behavior: contain;
+  overflow: auto;
+}
+#game[data-mobile-controls] #menu {
+  inset: var(--touch-top) var(--touch-right) var(--touch-bottom) var(--touch-left);
+  width: min(774px, calc(100% - var(--touch-left) - var(--touch-right)));
+}
+#game[data-mobile-controls] #hold {
+  top: calc(50% + (var(--touch-top) - var(--touch-bottom)) / 2);
+  left: calc(50% + (var(--touch-left) - var(--touch-right)) / 2);
+  width: min(650px, calc(100% - var(--touch-left) - var(--touch-right)));
+}
+#game[data-mobile-controls] .cargo-grid { grid-template-rows: repeat(var(--rows), minmax(44px, 5.8dvh)); }
+#game[data-mobile-controls] #game-water-inspector {
+  top: calc(var(--touch-top) + 50px);
+  right: var(--touch-right);
+  max-height: calc(100% - var(--touch-top) - var(--touch-bottom) - 50px);
+  width: min(410px, calc(100% - var(--touch-left) - var(--touch-right)));
+}
+
+@media (max-width: 675px) {
+  #game[data-mobile-controls][data-expedition] .status > span { display: none; }
+  #game[data-mobile-controls] .water-actions { top: calc(var(--touch-top) + 64px); }
+  #game[data-mobile-controls] .zone-intro { margin-top: 60px; }
+  #game[data-mobile-controls] #attack {
+    top: calc(var(--touch-top) + 112px);
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  #game[data-mobile-controls] :is(#menu-content, #hold) {
+    padding: 23px 9px 14px;
+    border-inline-width: 7px;
+  }
+  #game[data-mobile-controls] .button-row { justify-content: flex-start; }
+}
+@media (max-width: 360px) {
+  #game[data-mobile-controls] .hotspot > span { display: none; }
+  #game[data-mobile-controls] .status { gap: 2px; }
+  #game[data-mobile-controls] .status > span { padding-inline: 18px 0; border-inline-width: 5px; }
+  #game[data-mobile-controls] .readouts > div {
+    padding-inline: 3px;
+    border-inline-width: 4px;
+    font-size: .64rem;
+  }
+  #game[data-mobile-controls] .readouts > div::before { display: none; }
+  #game[data-mobile-controls] .wrath-status { min-width: 96px; }
+  #game[data-mobile-controls] .mobile-water-controls button { padding-inline: 6px; }
+}
+@media (orientation: landscape) and (min-width: 760px) {
+  #game[data-mobile-controls] .fishing-bottom {
+    bottom: var(--touch-bottom);
+    width: min(365px, 36vw);
+  }
+}

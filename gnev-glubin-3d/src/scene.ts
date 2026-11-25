@@ -3,7 +3,7 @@ import { createBoatVisualLoader, type BoatVisual } from './boat-visual';
 import { enemyTiming } from './enemies';
 import { createEnemyVisuals } from './enemy-visuals';
 import { createExpeditionLighting } from './expedition-light';
-import { between, distance, schoolRadius, waterCamera, type Expedition, type Point } from './expedition';
+import { between, distance, schoolLimit, schoolRadius, waterCamera, type Expedition, type Point } from './expedition';
 import { disposeLocation, type LoadedLocation } from './location-assets';
 import { createLocationEffects } from './location-environment';
 import { createGameWater } from './location-water';
@@ -222,6 +222,7 @@ const expeditionFraming = {
 function schoolMarker() {
   const root = new T.Group();
   const boundary = ring('#a4d6ce', schoolRadius, .967);
+  const specialBoundary = ring('#ca65ff', schoolRadius, .89);
   const ripples = [
     ring('#b9e9db', schoolRadius, .92, Math.PI * .66),
     ring('#b9e9db', schoolRadius, .94, Math.PI * .42)
@@ -232,8 +233,8 @@ function schoolMarker() {
     tail.rotation.z = Math.PI / 2;
     return body;
   });
-  root.add(boundary, ...ripples);
-  return { root, boundary, ripples, fish };
+  root.add(boundary, specialBoundary, ...ripples);
+  return { root, boundary, specialBoundary, ripples, fish };
 }
 
 function biteSpray() {
@@ -262,8 +263,10 @@ function sampleFlight(out: T.Vector3, start: T.Vector3, end: T.Vector3, lift: nu
 }
 
 export function createScene(host: HTMLElement, game: Expedition, markers: HTMLElement[]) {
+  const gameRoot = host.closest('#game');
+  const hasMobileControls = () => gameRoot?.hasAttribute('data-mobile-controls') ?? false;
   const renderer = new T.WebGLRenderer({ antialias: true, alpha: false });
-  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  renderer.setPixelRatio(Math.min(hasMobileControls() ? 1.25 : 2, window.devicePixelRatio || 1));
   renderer.outputColorSpace = T.SRGBColorSpace;
   renderer.toneMapping = T.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.12;
@@ -350,7 +353,7 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
   const floatTip = cylinder(float, '#e4d6a7', 0, .36, 0, .026, .16, 8);
   floatTip.material.emissive.set('#ffd8a1');
   const floatRipple = ring('#e4dcba', .40, .94);
-  const spots = Array.from({ length: 4 }, schoolMarker);
+  const spots = Array.from({ length: schoolLimit }, schoolMarker);
   const bite = biteSpray();
   const enemies = createEnemyVisuals(scene);
   const warning = ring('#ff8059', .95);
@@ -531,6 +534,11 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
     height = Math.max(1, host.clientHeight);
     dockCamera.aspect = width / height;
     dockCamera.fov = width < 820 ? 53 : 44;
+    if (hasMobileControls()) {
+      const minimumHorizontalFov = T.MathUtils.degToRad(36);
+      const verticalFov = 2 * Math.atan(Math.tan(minimumHorizontalFov / 2) / dockCamera.aspect);
+      dockCamera.fov = Math.max(dockCamera.fov, T.MathUtils.radToDeg(verticalFov));
+    }
     dockCamera.updateProjectionMatrix();
     fishingCamera.aspect = dockCamera.aspect;
     fishingCamera.updateProjectionMatrix();
@@ -660,7 +668,9 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
       if (activeLocation) {
         const { cameraOffset, targetOffset, framingAxis, framingShift, framingStart } = activeLocation;
         const distanceAcross = navigationFollow.dot(framingAxis) - framingStart;
-        const lead = 1 - .75 * T.MathUtils.smoothstep(distanceAcross, 4, 22);
+        // Center the casting area in narrow touch layouts, then ease back to the scenic framing.
+        const framingScale = hasMobileControls() ? T.MathUtils.smoothstep(dockCamera.aspect, .65, 1.3) : 1;
+        const lead = framingScale * (1 - .75 * T.MathUtils.smoothstep(distanceAcross, 4, 22));
         camera.position.copy(navigationFollow).add(cameraOffset).addScaledVector(framingShift, lead);
         look.copy(navigationFollow).add(targetOffset).addScaledVector(framingShift, lead);
       } else {
@@ -691,15 +701,20 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
       if (!spot) continue;
       const active = spot === game.fishingSpot;
       const selected = spot === castPreview?.school;
+      const special = spot.expiresAt !== undefined;
       const clarity = active ? .13 : firstPerson ? .33 : castPreview && !selected ? .55 : 1;
-      const hue = selected ? '#d9ffd5' : '#adebd9';
+      const hue = special ? (selected ? '#edbbff' : '#ca65ff') : (selected ? '#d9ffd5' : '#adebd9');
       marker.root.position.set(spot.x, surface(spot.x, spot.z) + .12, spot.z);
-      marker.boundary.material.color.set(hue);
-      marker.boundary.material.opacity = Math.min(1, (selected ? .72 : .36) * clarity * signalGain);
+      marker.boundary.visible = !special;
+      marker.specialBoundary.visible = special;
+      const boundary = special ? marker.specialBoundary : marker.boundary;
+      boundary.material.color.set(hue);
+      boundary.material.opacity = Math.min(1, (special ? .94 : selected ? .72 : .36) * clarity * signalGain);
       for (const [index, ripple] of marker.ripples.entries()) {
         const tick = (time * .65 + index * .47) % 1;
         ripple.scale.setScalar(.61 + tick * .50);
         ripple.rotation.y = time * .32 + spot.id * 1.2 + index * Math.PI;
+        ripple.material.color.set(special ? hue : '#b9e9db');
         ripple.material.opacity = Math.min(1, (1 - tick) * .51 * clarity * signalGain);
       }
       for (const [index, fish] of marker.fish.entries()) {
@@ -802,7 +817,9 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
       stringPositions.needsUpdate = true;
     }
     if (aim) {
-      const color = !castPreview ? '#f1d599' : castPreview.school ? '#bdf6c9' : castPreview.open ? '#f1d599' : '#e38874';
+      let color = '#f1d599';
+      if (castPreview?.school) color = castPreview.school.expiresAt !== undefined ? '#e2a8ff' : '#bdf6c9';
+      else if (castPreview && !castPreview.open) color = '#e38874';
       const landingHeight = surface(aim.x, aim.z);
       const height = landingHeight + .15;
       crosshair.position.set(aim.x, height, aim.z);

@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101d1c">
   <link rel="icon" href="data:,">
   <title>Гнев глубин · 3D</title>
@@ -22,9 +22,11 @@
 
     <section id="dock" aria-labelledby="dock-name">
       <div class="place"><span class="eyebrow">Угодья Посейдона</span><h1 id="dock-name">Причал</h1><p id="dock-goal"></p></div>
-      <button id="dock-shop" class="hotspot" data-action="shop"><span aria-hidden="true"></span> Лавка</button>
-      <button id="dock-boat" class="hotspot" data-action="map"><span aria-hidden="true"></span> Лодка</button>
-      <button id="dock-polyphemus" class="hotspot" type="button" data-action="polyphemus" aria-haspopup="dialog" aria-controls="menu"><span aria-hidden="true"></span> Полифем</button>
+      <div class="dock-actions" role="group" aria-label="Действия на причале">
+        <button id="dock-shop" class="hotspot" data-action="shop"><span aria-hidden="true"></span> Лавка</button>
+        <button id="dock-boat" class="hotspot" data-action="map"><span aria-hidden="true"></span> Лодка</button>
+        <button id="dock-polyphemus" class="hotspot" type="button" data-action="polyphemus" aria-haspopup="dialog" aria-controls="menu"><span aria-hidden="true"></span> Полифем</button>
+      </div>
     </section>
 
     <section id="fishing" aria-labelledby="zone-name" tabindex="-1" hidden>
@@ -55,6 +57,17 @@
         <div id="fight" class="fight" hidden>
           <div><label for="tension">Натяжение <span id="tension-number"></span></label><div class="tide-meter"><progress id="tension" max="100" value="0"></progress></div></div>
           <div><label for="distance">Леска <span id="distance-number"></span></label><div class="tide-meter"><progress id="distance" value="0"></progress></div></div>
+        </div>
+      </div>
+      <div class="mobile-water-controls">
+        <div id="mobile-steer" role="group" aria-label="Направление" hidden>
+          <button type="button" data-mobile-control="left" aria-label="Влево">←</button>
+          <button type="button" data-mobile-control="right" aria-label="Вправо">→</button>
+        </div>
+        <div class="mobile-water-actions" role="group" aria-label="Ловля и защита">
+          <button id="mobile-cast" type="button" data-action="mobile-cast" aria-pressed="false">Заброс</button>
+          <button id="mobile-bow" type="button" data-action="mobile-bow" aria-pressed="false">Лук</button>
+          <button id="mobile-fish-action" type="button" data-action="mobile-fish-action" hidden>Подсечь</button>
         </div>
       </div>
     </section>
