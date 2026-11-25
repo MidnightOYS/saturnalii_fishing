@@ -272,9 +272,10 @@ export function makeLabUI(onChange: (mode: Mode, settings: LabSettings, snapshot
   }, 220);
 
   if (game) {
-    find('.lab-panel').prepend(nav);
+    const panel = find('.lab-panel');
+    panel.prepend(nav);
+    find('.lab-inspector').replaceWith(panel);
     find('.lab-heading').remove();
-    find('.lab-inspector > summary').remove();
     find('.lab-session-controls').remove();
     find('.lab-actions').remove();
   } else {
