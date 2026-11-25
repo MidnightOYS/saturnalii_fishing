@@ -4,7 +4,7 @@ import labStyle from './ui.css?inline';
 import collectionStyle from './collection-ui.css?inline';
 import gameStyle from './collection-game.css?inline';
 import {
-  colorNames, defaultCollection, definitions, effectNames, modeGroups, rangesFor,
+  collectionPresets, colorNames, defaultCollection, definitions, effectNames, modeGroups, rangesFor,
   readCollection, switchesFor, wrathControl, type CollectionSnapshot, type LabSettings, type Mode, type Range,
 } from './collection-settings';
 export type { LabSettings, Mode } from './collection-settings';
@@ -64,7 +64,7 @@ export function makeLabUI(onChange: (mode: Mode, settings: LabSettings, snapshot
     root = element('div', 'game-water-collection');
     shadow.append(style, root);
   }
-  let snapshot = initial ?? defaultCollection();
+  let snapshot = initial ?? defaultCollection(game);
   root.classList.add('lab-collection');
   root.innerHTML = `
     <header class="lab-heading">
@@ -169,7 +169,7 @@ export function makeLabUI(onChange: (mode: Mode, settings: LabSettings, snapshot
   }
   function refreshPresets() {
     const settings = current();
-    const { presets: items } = definitions[snapshot.mode];
+    const items = collectionPresets(snapshot.mode, game);
     const active = items.findIndex(preset => (preset.cameraElevation === undefined || preset.cameraElevation === snapshot.cameraElevation)
       && Object.entries(preset.settings).every(([key, value]) => {
         const selected = settings[key as keyof LabSettings];
@@ -184,7 +184,7 @@ export function makeLabUI(onChange: (mode: Mode, settings: LabSettings, snapshot
     find('.lab-tech h2').textContent = def.title;
     find('.lab-tech p').textContent = def.summary;
     nav.querySelectorAll('button').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.mode === snapshot.mode)));
-    presets.replaceChildren(...def.presets.map(preset => {
+    presets.replaceChildren(...collectionPresets(snapshot.mode, game).map(preset => {
       const button = element('button', '', preset.name);
       button.type = 'button';
       button.onclick = () => {
@@ -272,9 +272,10 @@ export function makeLabUI(onChange: (mode: Mode, settings: LabSettings, snapshot
   }, 220);
 
   if (game) {
-    find('.lab-panel').prepend(nav);
+    const panel = find('.lab-panel');
+    panel.prepend(nav);
+    find('.lab-inspector').replaceWith(panel);
     find('.lab-heading').remove();
-    find('.lab-inspector > summary').remove();
     find('.lab-session-controls').remove();
     find('.lab-actions').remove();
   } else {

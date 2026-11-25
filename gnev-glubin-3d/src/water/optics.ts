@@ -2,6 +2,7 @@ export const waterOptics = `
 uniform float uTime, uStorm, uFoam, uWake, uWakeActive, uReflect, uDistortion, uFog, uSunPower;
 uniform float uCapillaryOn, uDepthOn, uCrestLightOn, uShoreFoamOn, uCrestFoamOn;
 uniform float uRoughness, uClarity, uScattering;
+uniform float uCausticGain;
 uniform vec3 uDeep, uShallow, uCrestColor, uSky, uSunDir, uSunColor, uOrthoEye;
 uniform vec2 uGlintOrigin;
 uniform vec4 uWorldRect, uRipples[6], uLamps[4];
@@ -187,7 +188,7 @@ void main() {
   float marbling = .54 + .39 * large.g + .14 * sand.g;
   vec3 bed = mix(uShallow * vec3(1.34, 1.08, .76), uShallow * vec3(.59, .77, .69), smoothstep(.38, .74, large.g));
   bed *= marbling;
-  bed += uSunColor * caustic * uCrestLightOn * uScattering * (.73 - .56 * uStorm);
+  bed += uSunColor * caustic * uCrestLightOn * uScattering * (.73 - .56 * uStorm) * uCausticGain;
   vec3 transmittance = exp(-vec3(.66, .32, .20) * opticalLength / max(.15, uClarity));
   vec3 columnColor = mix(uDeep, uShallow * .57, exp(-d * .63) * .42);
   vec3 body = columnColor * (1.0 - transmittance) + bed * transmittance;

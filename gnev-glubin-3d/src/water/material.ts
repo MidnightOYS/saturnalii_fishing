@@ -18,6 +18,7 @@ export const fragmentShader = `
   #define MAX_LAMPS 4
   uniform float uTime, uStorm, uFoam, uWake, uWakeActive, uReflect, uDistortion, uFog, uSunPower;
   uniform float uCapillaryOn, uDepthOn, uCrestLightOn, uShoreFoamOn, uCrestFoamOn;
+  uniform float uCausticGain;
   uniform vec3 uDeep, uShallow, uCrestColor, uSky, uSunDir, uSunColor, uOrthoEye;
   uniform vec2 uGlintOrigin;
   uniform vec4 uWorldRect, uRipples[MAX_RIPPLES], uLamps[MAX_LAMPS];
@@ -77,7 +78,7 @@ export const fragmentShader = `
     body += uCrestLightOn * clearCrest * crest * (.57 + backlight) * (1.0 - depth * .27);
     // The submerged shelf catches a faint moving pattern beneath the surface.
     float bed = pow(detail.r, 2.6) * (.4 + .60 * secondary.r);
-    body += uShallow * bed * (.20 * (1.0 - depth)) * (1.0 - uStorm * .78);
+    body += uShallow * bed * (.20 * (1.0 - depth)) * (1.0 - uStorm * .78) * uCausticGain;
     body *= .96 + .075 * secondary.g;
     vec3 reflected = uSky;
     if (uReflect > .001) {

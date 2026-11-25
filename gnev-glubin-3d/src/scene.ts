@@ -1,8 +1,10 @@
 import * as T from 'three';
+import { createExpeditionLighting } from './expedition-light';
 import { between, distance, schoolRadius, waterCamera, type Expedition, type Point } from './expedition';
 import { disposeLocation, type LoadedLocation } from './location-assets';
 import { createLocationEffects } from './location-environment';
 import { createGameWater } from './location-water';
+import { defaultVisualTuning, type VisualTuning } from './visual-tuning';
 import type { CollectionCamera } from './water-lab/collection';
 import { defaultCollectionSettings, type LabSettings, type Mode } from './water-lab/collection-settings';
 
@@ -198,12 +200,49 @@ function waterSurface() {
   return { water, uniforms };
 }
 
-function ring(color: T.ColorRepresentation, r: number) {
-  const geometry = new T.RingGeometry(r * .86, r, 30);
+function ring(color: T.ColorRepresentation, r: number, edge = .86, arc = Math.PI * 2) {
+  const geometry = new T.RingGeometry(r * edge, r, 30, 1, 0, arc);
   geometry.rotateX(-Math.PI / 2);
   return new T.Mesh(geometry, new T.MeshBasicMaterial({
     color, transparent: true, opacity: .8, depthWrite: false, side: T.DoubleSide
   }));
+}
+
+const expeditionFraming = {
+  pond: { vertical: 13.35, lateral: 8.55, forward: .9 },
+  temple: { vertical: 12.25, lateral: 5.25, forward: 1.25 }
+};
+
+function schoolMarker() {
+  const root = new T.Group();
+  const boundary = ring('#a4d6ce', schoolRadius, .967);
+  const ripples = [
+    ring('#b9e9db', schoolRadius, .92, Math.PI * .66),
+    ring('#b9e9db', schoolRadius, .94, Math.PI * .42)
+  ];
+  const fish = Array.from({ length: 3 }, () => {
+    const body = stone(root, '#b7ddbd', 0, .15, 0, .26, .08, .105);
+    const tail = mesh(body, new T.ConeGeometry(.38, .64, 3), '#a4cdb0', -.86, 0, 0);
+    tail.rotation.z = Math.PI / 2;
+    return body;
+  });
+  root.add(boundary, ...ripples);
+  return { root, boundary, ripples, fish };
+}
+
+function biteSpray() {
+  const root = new T.Group();
+  const material = new T.MeshBasicMaterial({
+    color: '#edfff2', transparent: true, opacity: 0, depthWrite: false, toneMapped: false
+  });
+  const geometry = new T.TetrahedronGeometry(.055);
+  const droplets = Array.from({ length: 7 }, (_, index) => {
+    const drop = new T.Mesh(geometry, material);
+    drop.scale.setScalar(1.25 - index * .08);
+    root.add(drop);
+    return drop;
+  });
+  return { root, droplets, material };
 }
 
 function flightLift(range: number, bow: boolean) {
@@ -256,6 +295,7 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
   const sunDirection = sun.position.clone().normalize();
   const ambient = new T.HemisphereLight('#e0e1c8', '#4f6c64', 1.65);
   scene.add(sun, ambient);
+  const lighting = createExpeditionLighting(renderer, scene, fog, sun, ambient, sunDirection);
 
   const { water, uniforms } = waterSurface();
   const { dock, stall } = createDock();
@@ -297,19 +337,11 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
   const floatBody = mesh(float, new T.SphereGeometry(.13, 12, 8), '#e4d6a7', 0, .10, 0);
   floatBody.scale.y = 1.55;
   cylinder(float, '#b95d49', 0, .23, 0, .077, .15, 10, .097);
-  cylinder(float, '#e4d6a7', 0, .36, 0, .026, .16, 8);
-  const floatRipple = ring('#d6c99c', .40);
-  const spots = Array.from({ length: 4 }, () => {
-    const marker = new T.Group();
-    const halo = ring('#91e3c0', schoolRadius);
-    marker.add(halo, ring('#d5ecd0', schoolRadius), ring('#d5ecd0', schoolRadius));
-    for (let i = 0; i < 3; i += 1) {
-      const fish = stone(marker, '#b7ddbd', 0, .15, 0, .26, .08, .105);
-      const tail = mesh(fish, new T.ConeGeometry(.38, .64, 3), '#a4cdb0', -.86, 0, 0);
-      tail.rotation.z = Math.PI / 2;
-    }
-    return marker;
-  });
+  const floatTip = cylinder(float, '#e4d6a7', 0, .36, 0, .026, .16, 8);
+  floatTip.material.emissive.set('#ffd8a1');
+  const floatRipple = ring('#e4dcba', .40, .94);
+  const spots = Array.from({ length: 4 }, schoolMarker);
+  const bite = biteSpray();
   const { creature, upper, warning } = createMonster(scene);
   const arcSegments = 28;
   const arcPositions = new T.BufferAttribute(new Float32Array((arcSegments + 1) * 3), 3);
@@ -318,7 +350,9 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
     new T.LineBasicMaterial({ color: '#f4d592', transparent: true, opacity: .75, depthTest: false })
   );
   aimLine.frustumCulled = false;
-  const crosshair = ring('#f1d599', .34);
+  const crosshair = ring('#f1d599', .34, .78);
+  crosshair.material.depthTest = false;
+  crosshair.renderOrder = 3;
   const feather = new T.Group();
   const shaft = cylinder(feather, '#e9c584', 0, 0, 0, .036, .79, 6);
   shaft.rotation.x = Math.PI / 2;
@@ -336,7 +370,7 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
   weapon.add(new T.Line(new T.BufferGeometry().setAttribute('position', stringPositions),
     new T.LineBasicMaterial({ color: '#ead5a8' })));
   scene.add(horizon, harbor, water, dock, boat, float, line, floatRipple,
-    ...spots, spray, weapon, feather, aimLine, crosshair, splash);
+    ...spots.map(marker => marker.root), bite.root, spray, weapon, feather, aimLine, crosshair, splash);
 
   const pick = new T.Raycaster();
   const bowAimLevel = .63;
@@ -370,9 +404,11 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
 
   let time = 0;
   let visualStage = 0;
+  let visualTuning = defaultVisualTuning;
   let waterMode: Mode = 'refraction';
-  let waterSettings = defaultCollectionSettings(waterMode);
+  let waterSettings = defaultCollectionSettings(waterMode, true);
   let previousPhase = '';
+  let hadFishingCast = false;
   let rippledMiss: Expedition['missedCast'] = null;
   let rippledImpact: Expedition['impact'] = null;
   let activeLocation: {
@@ -381,10 +417,15 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
     water: ReturnType<typeof createGameWater>;
     cameraOffset: T.Vector3;
     targetOffset: T.Vector3;
+    framingAxis: T.Vector3;
+    framingShift: T.Vector3;
+    framingStart: number;
+    vertical: number;
   } | null = null;
 
   function clearLocation() {
     if (!activeLocation) return;
+    lighting.clearLocation();
     activeLocation.water.dispose();
     activeLocation.effects.dispose();
     disposeLocation(activeLocation.root);
@@ -401,19 +442,31 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
     const position = anchors[cameraAnchor];
     const target = anchors[cameraAnchor + '_target'];
     const spawn = new T.Vector3(...anchors.boat_spawn);
-    const cameraOffset = position ? new T.Vector3(...position).sub(spawn) : new T.Vector3(waterCamera.x, waterCamera.y, waterCamera.z);
     const targetOffset = target ? new T.Vector3(...target).sub(spawn) : new T.Vector3(0, 0, -1.25);
-    const effects = createLocationEffects(layout);
+    const cameraOffset = position ? new T.Vector3(...position).sub(spawn) : new T.Vector3(waterCamera.x, waterCamera.y, waterCamera.z);
+    const view = new T.Vector3().subVectors(cameraOffset, targetOffset).setY(0).normalize();
+    const framing = expeditionFraming[layout.proposed_three_slot];
+    const framingAxis = new T.Vector3(view.z, 0, -view.x);
+    const framingShift = framingAxis.clone().multiplyScalar(framing.lateral)
+      .addScaledVector(view, -framing.forward);
+    const effects = createLocationEffects(layout, root);
     try {
       const locationWater = createGameWater(renderer, scene, layout, effects.lamps);
       try {
         locationWater.select(waterMode, waterSettings);
+        lighting.setLocation(layout, root);
       } catch (error) {
+        lighting.clearLocation();
         locationWater.dispose();
         throw error;
       }
-      activeLocation = { root, effects, water: locationWater, cameraOffset, targetOffset };
+      activeLocation = {
+        root, effects, water: locationWater, cameraOffset, targetOffset,
+        framingAxis, framingShift, framingStart: spawn.dot(framingAxis), vertical: framing.vertical
+      };
       scene.add(root, effects.group);
+      navigationFollow.copy(spawn);
+      resizeExpeditionCamera();
     } catch (error) {
       effects.dispose();
       throw error;
@@ -427,6 +480,9 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
   }
   const fixedCamera = new T.Vector3(9.8, 7.7, 12.6);
   const harborLook = new T.Vector3(-.4, .1, -2.2);
+  const navigationFollow = new T.Vector3();
+  const boatAt = new T.Vector3();
+  const fishingLook = new T.Vector3();
   const look = new T.Vector3();
   const proj = new T.Vector3();
   const target = new T.Vector3();
@@ -438,6 +494,14 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
   const arrowDirection = new T.Vector3();
   let width = 0;
   let height = 0;
+  let wasFirstPerson = false;
+
+  function resizeExpeditionCamera() {
+    const vertical = Math.max(activeLocation?.vertical ?? 10.7, 12 / dockCamera.aspect);
+    const horizontal = vertical * dockCamera.aspect;
+    Object.assign(expeditionCamera, { left: -horizontal, right: horizontal, top: vertical, bottom: -vertical });
+    expeditionCamera.updateProjectionMatrix();
+  }
 
   function resize() {
     width = Math.max(1, host.clientWidth);
@@ -447,10 +511,7 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
     dockCamera.updateProjectionMatrix();
     fishingCamera.aspect = dockCamera.aspect;
     fishingCamera.updateProjectionMatrix();
-    const vertical = Math.max(10.7, 12 / dockCamera.aspect);
-    const horizontal = vertical * dockCamera.aspect;
-    Object.assign(expeditionCamera, { left: -horizontal, right: horizontal, top: vertical, bottom: -vertical });
-    expeditionCamera.updateProjectionMatrix();
+    resizeExpeditionCamera();
     renderer.setSize(width, height, false);
   }
   new ResizeObserver(resize).observe(host);
@@ -466,7 +527,8 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
       clearLocation();
     }
 
-    const desiredStage = run ? game.stage - 1 : 0;
+    const previewStage = visualTuning.stage;
+    const desiredStage = run ? (previewStage === 'auto' ? game.stage - 1 : previewStage) : 0;
     const stageDelta = desiredStage - visualStage;
     visualStage += Math.sign(stageDelta) * Math.min(Math.abs(stageDelta), dt / game.balance.wrath.visualTransition);
     const low = Math.floor(visualStage);
@@ -481,12 +543,13 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
     uniforms.uDeep.value.copy(a.deep).lerp(b.deep, blend);
     uniforms.uCrest.value.copy(a.crest).lerp(b.crest, blend);
     uniforms.uGlint.value.copy(a.glint).lerp(b.glint, blend);
-    (scene.background as T.Color).copy(uniforms.uSky.value);
     fog.color.copy(uniforms.uSky.value);
     fog.density = uniforms.uFog.value;
     sun.intensity = T.MathUtils.lerp(a.sun, b.sun, blend);
 
     ambient.intensity = atDock ? 1.65 : T.MathUtils.lerp(1.65, .68, visualStage / 2);
+    lighting.update(visualStage, visualTuning);
+    (scene.background as T.Color).copy(fog.color);
     dock.visible = harbor.visible = horizon.visible = atDock;
     water.visible = atDock;
     const bx = run ? game.position.x : 1.58;
@@ -499,14 +562,17 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
     const locationWater = activeLocation?.water;
     camera = atDock ? dockCamera : firstPerson ? fishingCamera : expeditionCamera;
     if (run && locationWater) {
-      locationWater.update(time, T.MathUtils.clamp(run.wrath / 100, 0, 1), {
+      const visualWrath = previewStage === 'auto'
+        ? T.MathUtils.clamp(run.wrath / 100, 0, 1)
+        : .04 + visualStage * .4;
+      locationWater.update(time, visualWrath, {
         camera, hull: { x: bx, z: bz, heading },
         sky: fog.color, fog: fog.density, sunDirection, sunColor: sun.color, sunPower: sun.intensity,
         surge: run.phase === 'surge' ? T.MathUtils.clamp(run.age / game.balance.wrath.finalPause, 0, 1) : -1,
         threat: monster ? {
           x: monster.x, z: monster.z, strength: Math.min(1, monster.age / .78), heading: monsterHeading
         } : undefined
-      });
+      }, visualStage, visualTuning);
       locationWater.emitWake({ x: bx + dx * 1.9, z: bz + dz * 1.9 }, game.velocity);
     }
     const surface = locationWater
@@ -525,8 +591,9 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
       creature.rotation.y = monsterHeading;
       upper.position.y = Math.min(0, (monster.age - .78) * 1.8) + Math.sin(time * 12) * .09;
       upper.rotation.z = Math.sin(time * 8) * .11;
-      warning.material.color.set(monster.windup > 0 ? '#ffdaa0' : '#ff8059');
-      warning.scale.setScalar(1 + Math.sin(time * 7) * .12);
+      warning.material.color.set(monster.windup > 0 ? '#ffd29c' : '#ff8059');
+      warning.material.opacity = monster.windup > 0 ? .91 : .42 + Math.sin(time * 7) * .11;
+      warning.scale.setScalar(monster.windup > 0 ? 1 + monster.windup * .43 : 1);
     }
     spray.visible = run?.phase === 'surge';
     if (spray.visible && run) {
@@ -545,6 +612,10 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
     const castRange = game.castPoint ? distance(game.position, game.castPoint) : 0;
     const fighting = run?.phase === 'struggle' || run?.phase === 'reel';
     const lookRange = fighting ? run!.distance : castRange;
+    if (run) {
+      boatAt.set(bx, 0, bz);
+      navigationFollow.lerp(boatAt, 1 - Math.exp(-dt * 8));
+    }
     if (atDock) {
       camera.position.copy(fixedCamera);
       camera.lookAt(harborLook);
@@ -557,19 +628,25 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
       } else {
         look.set(bx - dx * lookAhead, .22, bz - dz * lookAhead);
       }
-      fishingCamera.lookAt(look);
+      if (wasFirstPerson) fishingLook.lerp(look, 1 - Math.exp(-dt * 9));
+      else fishingLook.copy(look);
+      fishingCamera.lookAt(fishingLook);
     } else {
       if (activeLocation) {
-        camera.position.set(bx, 0, bz).add(activeLocation.cameraOffset);
-        look.set(bx, 0, bz).add(activeLocation.targetOffset);
+        const { cameraOffset, targetOffset, framingAxis, framingShift, framingStart } = activeLocation;
+        const distanceAcross = navigationFollow.dot(framingAxis) - framingStart;
+        const lead = 1 - .75 * T.MathUtils.smoothstep(distanceAcross, 4, 22);
+        camera.position.copy(navigationFollow).add(cameraOffset).addScaledVector(framingShift, lead);
+        look.copy(navigationFollow).add(targetOffset).addScaledVector(framingShift, lead);
       } else {
         look.set(bx, 0, bz - 1.25);
         camera.position.set(look.x + waterCamera.x, waterCamera.y, look.z + waterCamera.z);
       }
       camera.lookAt(look);
     }
+    wasFirstPerson = firstPerson;
     camera.updateMatrixWorld();
-    activeLocation?.effects.update(time, visualStage, surface);
+    activeLocation?.effects.update(time, visualStage, surface, visualTuning);
 
     for (const [index, marker] of markers.entries()) {
       if (!atDock) break;
@@ -580,46 +657,56 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
       marker.style.top = `${T.MathUtils.clamp((1 - proj.y) * height / 2, height * .29, height * .86)}px`;
     }
 
+    const signalGain = visualTuning.signals;
     const castPreview = run && game.drawing && !game.aiming ? game.castPreview : null;
     for (const [i, marker] of spots.entries()) {
       const spot = run ? game.schools[i] : null;
-      marker.visible = Boolean(spot);
+      marker.root.visible = Boolean(spot);
       if (!spot) continue;
-      marker.position.set(spot.x, surface(spot.x, spot.z) + .13, spot.z);
-      const hue = spot === castPreview?.school || spot === game.fishingSpot ? '#ffdc8a' : '#9de2c3';
-      for (const [index, circle] of marker.children.entries()) {
-        if (index < 3) {
-          const visual = circle as ReturnType<typeof ring>;
-          const tick = (time * .72 + index / 2) % 1;
-          visual.scale.setScalar(index === 0 ? 1 : .53 + tick * .80);
-          visual.material.color.set(hue);
-          visual.material.opacity = index === 0 ? .62 : (1 - tick) * .96;
-        } else {
-          const angle = time * 1.48 + index * 2.1;
-          circle.position.set(Math.cos(angle) * .70, .17, Math.sin(angle) * .64);
-          circle.rotation.y = -angle - Math.PI / 2;
-        }
+      const active = spot === game.fishingSpot;
+      const selected = spot === castPreview?.school;
+      const clarity = active ? .13 : firstPerson ? .33 : castPreview && !selected ? .55 : 1;
+      const hue = selected ? '#d9ffd5' : '#adebd9';
+      marker.root.position.set(spot.x, surface(spot.x, spot.z) + .12, spot.z);
+      marker.boundary.material.color.set(hue);
+      marker.boundary.material.opacity = Math.min(1, (selected ? .72 : .36) * clarity * signalGain);
+      for (const [index, ripple] of marker.ripples.entries()) {
+        const tick = (time * .65 + index * .47) % 1;
+        ripple.scale.setScalar(.61 + tick * .50);
+        ripple.rotation.y = time * .32 + spot.id * 1.2 + index * Math.PI;
+        ripple.material.opacity = Math.min(1, (1 - tick) * .51 * clarity * signalGain);
+      }
+      for (const [index, fish] of marker.fish.entries()) {
+        const angle = time * 1.15 + index * .69 + spot.id;
+        const radius = .69 - index * .12;
+        fish.visible = !active && !firstPerson && signalGain > 0;
+        fish.position.set(Math.cos(angle) * radius, .105, Math.sin(angle) * radius);
+        fish.rotation.y = -angle - Math.PI / 2;
       }
     }
 
     const cast = firstPerson || run?.phase === 'cast' ? run?.cast : null;
     const spot = game.castPoint;
     const missedCast = run ? game.missedCast : null;
+    if (hadFishingCast && !(cast && spot)) locationWater?.clearRipples();
+    hadFishingCast = Boolean(cast && spot);
     if (spot && run && run.phase !== previousPhase) {
-      if (run.phase === 'wait') locationWater?.ripple(spot.x, spot.z, .9);
-      if (run.phase === 'hook') locationWater?.ripple(spot.x, spot.z, 1.2);
+      if (run.phase === 'wait' && signalGain > 0) locationWater?.ripple(spot.x, spot.z, .55 * signalGain);
+      if (run.phase === 'hook' && signalGain > 0) locationWater?.ripple(spot.x, spot.z, 1.2 * signalGain);
     }
     previousPhase = run?.phase ?? '';
     if (missedCast && missedCast !== rippledMiss && missedCast.age >= game.balance.aim.flight) {
-      locationWater?.ripple(missedCast.end.x, missedCast.end.z, .7);
+      if (signalGain > 0) locationWater?.ripple(missedCast.end.x, missedCast.end.z, .7 * signalGain);
       rippledMiss = missedCast;
     }
     if (!missedCast) rippledMiss = null;
     float.visible = line.visible = Boolean(cast && spot);
     floatRipple.visible = false;
+    bite.root.visible = false;
+    floatTip.material.emissiveIntensity = .52;
     if (cast && spot && run) {
       const flight = run.phase === 'cast';
-      const bite = run.phase === 'hook';
+      const biting = run.phase === 'hook';
       anchor.copy(rodTip);
       rodPivot.localToWorld(anchor);
       if (flight) {
@@ -631,15 +718,29 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
         const point = between(game.position, spot, t);
         const tug = fighting ? run.fishX * .45 : 0;
         target.set(point.x + tug * dz, 0, point.z - tug * dx);
-        target.y = surface(target.x, target.z) + (bite ? Math.sin(time * 35) * .12 : 0);
+        const dip = biting ? Math.exp(-run.age * 9) * Math.sin(run.age * 34) * .24 : 0;
+        target.y = surface(target.x, target.z) - dip;
       }
       const surfaceHeight = surface(target.x, target.z);
       float.position.copy(target);
       floatRipple.visible = !flight;
       floatRipple.position.set(target.x, surfaceHeight + .11, target.z);
-      const tick = (time * (bite ? 2.4 : .95)) % 1;
-      floatRipple.scale.setScalar(1 + tick * (bite ? 2.1 : 1.0));
-      floatRipple.material.opacity = (1 - tick) * .85;
+      const tick = biting ? Math.min(1, run.age / .42) : (time * .72) % 1;
+      floatRipple.scale.setScalar(1 + tick * (biting ? 1.7 : .7));
+      floatRipple.material.opacity = Math.min(1, (1 - tick) * (biting ? .88 : .33) * signalGain);
+      if (biting && run.age < .38) {
+        const progress = run.age / .38;
+        bite.root.visible = signalGain > 0;
+        bite.root.position.set(target.x, surfaceHeight + .055, target.z);
+        bite.root.rotation.y = Math.atan2(spot.x - bx, spot.z - bz);
+        bite.material.opacity = Math.min(1, (1 - progress) * signalGain);
+        floatTip.material.emissiveIntensity = .52 + (1 - progress) * .7;
+        for (const [index, drop] of bite.droplets.entries()) {
+          const spread = (index - 3) / 3;
+          const arc = 4 * progress * (1 - progress);
+          drop.position.set(spread * progress * .62, arc * (.46 - Math.abs(spread) * .21), progress * (.42 + index * .084));
+        }
+      }
       linePositions.setXYZ(0, anchor.x, anchor.y, anchor.z);
       linePositions.setXYZ(1, (anchor.x + target.x) / 2, (anchor.y + float.position.y) / 2 - .15, (anchor.z + target.z) / 2);
       linePositions.setXYZ(2, target.x, float.position.y + .31, target.z);
@@ -658,7 +759,7 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
         floatRipple.visible = true;
         floatRipple.position.set(end.x, waterHeight + .11, end.z);
         floatRipple.scale.setScalar(.7 + rippleAge * 1.6);
-        floatRipple.material.opacity = (1 - rippleAge) * .85;
+        floatRipple.material.opacity = Math.min(1, (1 - rippleAge) * .85 * signalGain);
       }
     }
 
@@ -680,8 +781,7 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
       const height = landingHeight + .15;
       crosshair.position.set(aim.x, height, aim.z);
       crosshair.material.color.set(color);
-      crosshair.material.depthTest = false;
-      crosshair.renderOrder = 3;
+      crosshair.material.opacity = .96;
       aimLine.material.color.set(color);
       flightStart.set(bx, boat.position.y + (bowAim ? 1.20 : 1.43), bz);
       flightEnd.set(aim.x, height, aim.z);
@@ -719,13 +819,25 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
     rippledImpact = impact;
 
     if (locationWater) {
-      locationWater.renderPasses(camera);
-      locationWater.renderScene(camera);
+      // Capture the static shadow map in the main scene, outside clipped optical passes.
+      const refreshShadows = renderer.shadowMap.needsUpdate;
+      renderer.shadowMap.needsUpdate = false;
+      try {
+        locationWater.renderPasses(camera);
+      } finally {
+        renderer.shadowMap.needsUpdate = refreshShadows;
+      }
+      lighting.render(camera, () => locationWater.renderScene(camera));
     } else {
       renderer.render(scene, camera);
     }
   }
 
   update(0);
-  return { update, pointAt, setLocation, clearLocation, selectWater };
+  return {
+    update, pointAt, setLocation, clearLocation, selectWater,
+    setVisualTuning(tuning: VisualTuning) {
+      visualTuning = { ...tuning };
+    },
+  };
 }

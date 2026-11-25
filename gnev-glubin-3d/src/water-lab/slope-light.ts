@@ -56,6 +56,7 @@ float waterFresnel(float cosine) {
 // separately by the Beckmann distribution and never multiplied by a world-space mask.
 vec3 skyRadiance(vec3 ray) {
   float y = clamp(ray.y, 0.0, 1.0);
+  if (uGameWater > .5) return sceneSkyRadiance(ray);
   vec3 zenith = mix(vec3(.19, .40, .59), vec3(.065, .108, .18), uWrath);
   vec3 horizon = mix(vec3(.80, .81, .69), vec3(.31, .36, .40), uWrath);
   float azimuth = dot(normalize(ray.xz + vec2(.0001)), normalize(uSun.xz + vec2(.0001)));
@@ -126,7 +127,7 @@ void main() {
   vec3 color = mix(uDeep * .68, uShallow * .62, .03 + .10 * shoulder + .36 * lift * shoulder);
   color += sky * (.50 + .46 * uLight);
   // Shoulder on the intense sun only; retain detail before the scene-wide tone mapping.
-  float solar = glint * (.67 - .16 * uWrath) * uLight;
+  float solar = glint * (.67 - .16 * uWrath) * uLight * uSceneSun;
   color += uSunColor * solar / (1.0 + solar * .87);
   gl_FragColor = vec4(labFinish(color), 1.0);
   #include <tonemapping_fragment>

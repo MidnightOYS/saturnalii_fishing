@@ -80,6 +80,9 @@ export type WaterLighting = {
   sunColor?: T.Color;
   sunPower?: number;
   glintOrigin?: WaterPoint;
+  surfacePalette?: { deep: T.Color; shallow: T.Color; crest: T.Color };
+  causticGain?: number;
+  lampGain?: number;
 };
 
 type WaterOptions = {
@@ -132,7 +135,7 @@ export function createWater({ bounds, shores = [], settings: overrides, variant:
     uCrestColor: { value: new T.Color('#64ac9b') }, uSky: { value: new T.Color('#849398') },
     uSunDir: { value: new T.Vector3(-.41, .69, -.60).normalize() },
     uSunColor: { value: new T.Color('#ffdfac') }, uSunPower: { value: 1 },
-    uCapillaryOn: { value: 1 }, uDepthOn: { value: 1 }, uCrestLightOn: { value: 1 },
+    uCapillaryOn: { value: 1 }, uDepthOn: { value: 1 }, uCrestLightOn: { value: 1 }, uCausticGain: { value: 1 },
     uShoreFoamOn: { value: 1 }, uCrestFoamOn: { value: 1 },
     uOrthoEye: { value: new T.Vector3() }, uGlintOrigin: { value: new T.Vector2(-3, -11) },
     uWorldRect: { value: worldRect },
@@ -158,6 +161,7 @@ export function createWater({ bounds, shores = [], settings: overrides, variant:
   mesh.frustumCulled = false;
   let time = 0;
   let previousShallow = '', previousDeep = '', previousCrest = '';
+  const baseShallow = new T.Color(), baseDeep = new T.Color(), baseCrest = new T.Color();
 
   function setVariant(next: WaterVariant) {
     variant = next;
@@ -188,12 +192,16 @@ export function createWater({ bounds, shores = [], settings: overrides, variant:
     uniforms.uCrestFoamOn.value = Number(effects.crestFoam);
     uniforms.uWake.value = settings.wake;
     uniforms.uDistortion.value = settings.distortion;
-    if (settings.shallow !== previousShallow) uniforms.uShallow.value.set(previousShallow = settings.shallow);
-    if (settings.deep !== previousDeep) uniforms.uDeep.value.set(previousDeep = settings.deep);
-    if (settings.crest !== previousCrest) uniforms.uCrestColor.value.set(previousCrest = settings.crest);
+    if (settings.shallow !== previousShallow) baseShallow.set(previousShallow = settings.shallow);
+    if (settings.deep !== previousDeep) baseDeep.set(previousDeep = settings.deep);
+    if (settings.crest !== previousCrest) baseCrest.set(previousCrest = settings.crest);
+    uniforms.uShallow.value.copy(light.surfacePalette?.shallow ?? baseShallow);
+    uniforms.uDeep.value.copy(light.surfacePalette?.deep ?? baseDeep);
+    uniforms.uCrestColor.value.copy(light.surfacePalette?.crest ?? baseCrest);
     uniforms.uRoughness.value = settings.roughness;
     uniforms.uScattering.value = settings.scattering;
     uniforms.uClarity.value = settings.clarity;
+    uniforms.uCausticGain.value = light.causticGain ?? 1;
     if (light.sky) uniforms.uSky.value.copy(light.sky);
     if (light.fog !== undefined) uniforms.uFog.value = light.fog;
     if (light.sunDirection) uniforms.uSunDir.value.copy(light.sunDirection).normalize();
@@ -202,7 +210,7 @@ export function createWater({ bounds, shores = [], settings: overrides, variant:
     uniforms.uSunPower.value = effects.sunGlint ? sunPower : 0;
     for (const [i, uniform] of uniforms.uLamps.value.entries()) {
       const lamp = lamps[i];
-      if (lamp && effects.lamps) uniform.set(lamp.position.x, lamp.position.y, lamp.position.z, lamp.strength);
+      if (lamp && effects.lamps) uniform.set(lamp.position.x, lamp.position.y, lamp.position.z, lamp.strength * (light.lampGain ?? 1));
       else uniform.w = 0;
     }
     if (light.glintOrigin) uniforms.uGlintOrigin.value.set(light.glintOrigin.x, light.glintOrigin.z);
@@ -283,6 +291,11 @@ export function createWater({ bounds, shores = [], settings: overrides, variant:
     }
   }
 
+  function clearRipples() {
+    ripples.length = 0;
+    for (const uniform of uniforms.uRipples.value) uniform.w = 0;
+  }
+
   setVariant(initialVariant);
   update(0, 0);
   return {
@@ -307,7 +320,8 @@ export function createWater({ bounds, shores = [], settings: overrides, variant:
       if (ripples.length >= maxRipples) ripples.shift();
       ripples.push({ x, z, time: now, strength: T.MathUtils.clamp(strength, 0, 1.5) });
     },
-    clearTransient() { ripples.length = 0; wake.clear(); },
+    clearRipples,
+    clearTransient() { clearRipples(); wake.clear(); },
     reflectionSize: () => ({ width: mirror.width, height: mirror.height }),
     dispose() {
       mesh.removeFromParent();

@@ -142,15 +142,22 @@ const surfLight = /* glsl */`
     vec3 n=normalize(normal+vec3(ripple.x,0.,ripple.y)*(.021+.023*uWrath)*small);
     float noise=surfGrain(p*.29+vec2(.029*t,-.018*t));
     float shelf=.035+.088*smoothstep(-15.,4.,p.y+sin(p.x*.16)*2.7);
-    float face=clamp(dot(n,normalize(vec3(-.48,.34,-.68))),0.,1.);
+    if (uGameWater > .5) {
+      vec2 uv = (p - uWorldRect.xy) / uWorldRect.zw;
+      float depth = texture2D(uShoreMap, clamp(uv, 0., 1.)).g;
+      shelf = .036 + .46 * (1. - smoothstep(.1, .7, depth));
+    }
+    vec3 lightDirection = uGameWater > .5 ? uSun : vec3(-.48,.34,-.68);
+    float face=clamp(dot(n,normalize(lightDirection)),0.,1.);
     vec3 body=mix(uDeep*vec3(.72,.88,.91),uShallow,shelf+.045*noise)*(.71+.35*face+.13*noise);
     float grazing=pow(1.-max(dot(n,normalize(uEye)),0.),5.);
-    body+=vec3(.025,.064,.075)*grazing;
+    vec3 reflection = uGameWater > .5 ? sceneSkyRadiance(reflect(-normalize(uEye), n)) * .16 : vec3(.025,.064,.075);
+    body+=reflection*grazing;
     float spec=max(0.,dot(reflect(-normalize(uEye),n),normalize(uSun)));
     float glitterPatch=surfGrain(p*vec2(.71,.38)+t*.043+noise*.65);
     float streak=surfNoise(p*vec2(5.4,2.1)+ripple*.18+vec2(t*.23,-t*.19));
     float fleck=smoothstep(.60,.81,glitterPatch)*smoothstep(.48,.84,streak);
-    return body+uSunColor*uLight*(.015*pow(spec,62.)+.27*pow(spec,186.)*fleck);
+    return body+uSunColor*uLight*uSceneSun*(.015*pow(spec,62.)+.27*pow(spec,186.)*fleck);
   }
 `;
 
@@ -179,7 +186,7 @@ const seaFragment = labFragmentHeader + seaPattern + surfLight + /* glsl */`
     vec3 body=seaBody(p,normalize(vNormal));
     float caps=smoothstep(.36,.91,vWorld.y)*smoothstep(.63,.84,surfGrain(p*2.+t*.045));
     float white=spilledFoam(p,uSites[0],uClips.x)+spilledFoam(p,uSites[1],uClips.y);
-    float froth=clamp((white*min(1.,uFeature)+caps*.19*uWrath)*uDetail,0.,.53);
+    float froth=clamp((white*min(1.,uFeature)+caps*.19*uWrath)*uDetail*uSceneFoam,0.,.53);
     body=mix(body,vec3(.71,.88,.86),froth);
     gl_FragColor=vec4(labFinish(body),1.);
     ${colorOutput}
@@ -242,7 +249,7 @@ const faceFragment = labFragmentHeader + seaPattern + surfLight + /* glsl */`
     float fracture=surfGrain(flowUv*2.05+vec2(uTime*.21,-uTime*.26));
     float threads=surfNoise(flowUv*vec2(4.7,1.25)+fracture*1.1);
     float filmFoam=smoothstep(.10,.44,vBreak.z)*smoothstep(.51,.71,fracture*.73+threads*.27);
-    shell=mix(shell,vec3(.44,.65,.60),clamp(filmFoam*uDetail*.81,0.,.73));
+    shell=mix(shell,vec3(.44,.65,.60),clamp(filmFoam*uDetail*.81*uSceneFoam,0.,.73));
     vec3 color=mix(base,shell,smoothstep(.015,.37,vBreak.w));
     gl_FragColor=vec4(labFinish(color),1.);
     ${colorOutput}

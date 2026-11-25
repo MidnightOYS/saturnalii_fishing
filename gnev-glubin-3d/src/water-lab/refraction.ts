@@ -1,4 +1,5 @@
 import * as T from 'three';
+import type { LocationSurface } from '../water/location-surface';
 import { labVertex, labFragmentHeader, labWaveFunctions } from './shared';
 
 // Only solid receivers enter the overhead depth atlas. Subpixel moving leaves
@@ -76,7 +77,10 @@ vec3 waterOpticalNormal(vec2 p, vec3 normal) {
 
 const concentrationVertex = `
 uniform float uTime,uWrath,uWaves,uWind;
+uniform float uGameWater;
 uniform vec3 uSun;
+uniform sampler2D uShoreMap;
+uniform vec4 uWorldRect;
 varying vec2 vIncidentXZ;
 varying vec2 vRefractedXZ;
 varying float vReceiverValid;
@@ -85,6 +89,17 @@ ${labWaveFunctions}
 ${capillaryGLSL}
 void main() {
   vec2 xz = uAtlasCenter + position.xy * uAtlasSpan * vec2(1., -1.);
+  if (uGameWater > .5) {
+    vec2 uv = (xz - uWorldRect.xy) / uWorldRect.zw;
+    vec3 coast = texture2D(uShoreMap, clamp(uv, 0., 1.)).rgb;
+    if (any(lessThan(uv, vec2(0.))) || any(greaterThan(uv, vec2(1.))) ||
+        coast.b < .49 || coast.r > .88 || coast.g > .86) {
+      vIncidentXZ = vRefractedXZ = xz;
+      vReceiverValid = 0.;
+      gl_Position = vec4(position.xy * 2., 0., 1.);
+      return;
+    }
+  }
   vec3 sea = vec3(xz.x, labHeight(xz), xz.y);
   vec3 normal = waterOpticalNormal(xz, labNormal(xz));
   vec3 sunRay = refract(-normalize(uSun), normal, 1.0 / 1.333);
@@ -103,6 +118,8 @@ uniform sampler2D uSubmergedScene;
 uniform sampler2D uCausticFlux;
 uniform vec2 uColorRaySlope;
 uniform float uLayerStyle, uLayerAmount;
+uniform vec4 uEyeWindow;
+uniform float uEyeClarity;
 
 // Two slowly evolving crossed fields give shafts and suspended sediment a
 // position in the water column, independently of the wave surface.
@@ -136,6 +153,18 @@ void main() {
   bool found = receiverHit(vWorld, ray, hit);
   vec2 uv = clamp(receiverUV(hit.xz), .001, .999);
   float path = found ? length(hit - vWorld) : 22.;
+  float shelf = 1., causticMask = 1., eyeWindow = 0.;
+  if (uGameWater > .5) {
+    vec2 coastUV = (vWorld.xz - uWorldRect.xy) / uWorldRect.zw;
+    vec2 coast = texture2D(uShoreMap, clamp(coastUV, 0., 1.)).rg;
+    float shoreDistance = coast.r * 7. - 1.;
+    shelf = (1. - smoothstep(.18, .77, coast.g)) * (1. - smoothstep(1.3, 4.5, shoreDistance));
+    causticMask = shelf * (1. - smoothstep(.85, 2.55, -hit.y)) * (found ? 1. : 0.);
+    if (uEyeClarity > .0 && uEyeWindow.z > .0) {
+      float eyeDistance = length((hit.xz - uEyeWindow.xy) / uEyeWindow.zw);
+      eyeWindow = (1. - smoothstep(.26, 1.20, eyeDistance)) * uEyeClarity;
+    }
+  }
   // Project the hit into the full scene captured along the mean refracted
   // direction; foliage between the surface and the floor keeps its silhouette.
   vec2 colorUV=clamp(receiverUV(hit.xz-hit.y*uColorRaySlope),.001,.999);
@@ -148,7 +177,7 @@ void main() {
   // divergence removes energy. The map is evaluated at the same refracted hit.
   float flux = texture2D(uCausticFlux, uv).r / .145;
   float sunlight = exp(-path * (.12 + uWrath * .18));
-  float focusing = clamp(flux - 1., -.70, 2.2) * uFeature * uLight * sunlight;
+  float focusing = clamp(flux - 1., -.70, 2.2) * uFeature * uLight * sunlight * causticMask * uSceneSun;
   if (meadow || wreck) focusing *= meadow ? .47 : .42;
   bed *= max(.49, .89 + focusing * .48);
   bed += uSunColor * vec3(.035, .095, .075) * max(0., focusing);
@@ -169,8 +198,13 @@ void main() {
     downwardTint=vec3(.24,.45,.68);
     absorption*=vec3(.84,.86,.80);
   }
+  if (uGameWater > .5) {
+    absorption *= mix(1.66, .78, shelf);
+    absorption *= 1. - (.63 + .15 * uWrath) * eyeWindow;
+    downwardTint = mix(downwardTint, vec3(.72, .83, .76), eyeWindow * .67);
+  }
   vec3 transmission = exp(-path * absorption);
-  vec3 volume = mix(uDeep, uShallow, exp(-path * .39) * .57);
+  vec3 volume = mix(uDeep, uShallow, exp(-path * .39) * .57 * shelf);
   volume *= vec3(.65, .91, .95);
   if (!found) transmission = vec3(0.);
   vec3 body = bed * downwardTint * transmission + volume * (1. - transmission);
@@ -214,21 +248,22 @@ void main() {
   float fresnel = .0204 + .9796 * pow(1. - ndv, 5.);
   vec3 sky = mix(vec3(.18, .38, .49), vec3(.06, .17, .245), smoothstep(.02, .88, reflected.y));
   if(uLayerStyle>2.5) sky=vec3(.028,.055,.11);
-  vec3 color = mix(body, sky, fresnel * (.58 + .24 * uLight));
+  if (uGameWater > .5) sky = sceneSkyRadiance(reflected) * (night ? .44 : 1.);
+  vec3 color = mix(body, sky, fresnel * (.58 + .24 * uLight) * (1. - eyeWindow * .34));
   float glint = max(dot(reflected, normalize(uSun)), .0);
   vec2 p = vWorld.xz;
   float ripple = .5 + .5 * sin(dot(p,vec2(8.5,5.4)) - uTime*2.31 + .9*sin(p.y*2.1+uTime*.7));
   float sparkle = pow(glint, 650.) * smoothstep(.72, .96, ripple);
   vec3 glintColor=uLayerStyle>2.5?vec3(.39,.65,.89):uSunColor;
   float sunGate = meadow ? .34 : (wreck ? .37 : (night ? .55 : 1.));
-  color += glintColor * uLight * sunGate * (.34 * sparkle + .014 * pow(glint, 125.));
+  color += glintColor * uLight * uSceneSun * sunGate * (.34 * sparkle + .014 * pow(glint, 125.));
   gl_FragColor = vec4(labFinish(color), 1.);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }`;
 
 export function createRefraction(
-  renderer: T.WebGLRenderer, scene: T.Scene, water: T.Mesh, uniforms: Uniforms
+  renderer: T.WebGLRenderer, scene: T.Scene, water: T.Mesh, uniforms: Uniforms, surface?: LocationSurface
 ) {
   const receivers = new T.WebGLRenderTarget(targetSize, targetSize, {
     depthBuffer: true, generateMipmaps: false, magFilter: T.LinearFilter, minFilter: T.LinearFilter
@@ -251,6 +286,7 @@ export function createRefraction(
   const opticalUniforms = {
     ...uniforms, uReceiverDepth: { value: receivers.depthTexture }, uSubmergedScene: { value: sceneColor.texture },
     uCausticFlux: { value: caustics.texture }, uColorRaySlope: {value:new T.Vector2()},
+    uEyeWindow: { value: surface?.eye ?? new T.Vector4() }, uEyeClarity: surface?.clarity ?? { value: 0 },
     uLayerStyle: uniforms.uLayerStyle ?? {value:0}, uLayerAmount: uniforms.uLayerAmount ?? {value:1},
     uAtlasCenter: { value: atlasCenter }, uAtlasSpan: { value: 50 }
   };
@@ -273,6 +309,7 @@ export function createRefraction(
   const colorCamera = new T.OrthographicCamera();
   const throughWater = new T.Vector2();
   const hiddenFoliage: T.Object3D[] = [];
+  const hiddenSurfaceEffects: T.Object3D[] = [];
   const emitterMaterials = new Map<T.MeshBasicMaterial,T.MeshBasicMaterial>();
   const activeEmitters = new Map<T.Mesh,T.MeshBasicMaterial>();
   const forward = new T.Vector3();
@@ -330,7 +367,13 @@ export function createRefraction(
       renderer.clippingPlanes = [...clipping, surfaceClip];
       renderer.setClearColor(0x000000, 0);
       hiddenFoliage.length=0;
+      hiddenSurfaceEffects.length = 0;
       scene.traverseVisible(o=>{
+        if (o.userData.waterSurfaceEffect) {
+          hiddenSurfaceEffects.push(o);
+          o.visible = false;
+          return;
+        }
         if (opticalUniforms.uLayerStyle.value>2.5 && o.userData.emissiveLayer &&
             o instanceof T.Mesh && o.material instanceof T.MeshBasicMaterial) {
           const original=o.material;
@@ -364,12 +407,13 @@ export function createRefraction(
       renderer.clippingPlanes = clipping;
       renderer.setRenderTarget(caustics);
       renderer.clear();
-      if (uniforms.uFeature.value > .001 && uniforms.uLight.value > .001)
+      if (uniforms.uFeature.value > .001 && uniforms.uLight.value > .001 && uniforms.uSceneSun.value > .001)
         renderer.render(fluxScene, atlasCamera);
     } finally {
       for(const [mesh,original] of activeEmitters) mesh.material=original;
       activeEmitters.clear();
       for(const o of hiddenFoliage) o.visible=true;
+      for (const o of hiddenSurfaceEffects) o.visible = true;
       scene.overrideMaterial=override;
       renderer.setRenderTarget(previous, face, mipmap);
       renderer.setClearColor(restoreColor, clearAlpha);

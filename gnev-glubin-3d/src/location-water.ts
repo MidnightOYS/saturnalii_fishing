@@ -1,9 +1,30 @@
 import * as T from 'three';
 import { createLocationWaterMap } from './location-environment';
-import type { LocationLayout } from './location-navigation';
-import { createWaterCollection, type CollectionFrame } from './water-lab/collection';
+import type { LocationLayout, LocationSlot } from './location-navigation';
+import type { VisualTuning } from './visual-tuning';
+import { createWaterCollection, type CollectionFrame, type ExpeditionWaterStyle } from './water-lab/collection';
 import type { BreakerSite } from './water-lab/breaker';
 import type { LabSettings, Mode } from './water-lab/collection-settings';
+
+type StagePalette = Omit<ExpeditionWaterStyle, 'caustics' | 'foamGain' | 'lamps'>;
+type WaterTuning = Pick<VisualTuning, 'waterGrade' | 'caustics' | 'foam' | 'lamps'>;
+
+function palette(deep: string, shallow: string, mixing: number, foam: number, glints: number): StagePalette {
+  return { deep: new T.Color(deep), shallow: new T.Color(shallow), mixing, foam, glints };
+}
+
+const stagePalettes: Record<LocationSlot, readonly [StagePalette, StagePalette, StagePalette]> = {
+  pond: [
+    palette('#074467', '#79cdb7', 0, .34, .88),
+    palette('#163758', '#4f9a9c', .46, .55, .63),
+    palette('#242145', '#56558c', .74, .90, .42),
+  ],
+  temple: [
+    palette('#102e53', '#609b8e', .37, .36, .88),
+    palette('#172946', '#557e83', .55, .56, .62),
+    palette('#1b2241', '#64708d', .77, .83, .49),
+  ],
+};
 
 function breakerSites(layout: LocationLayout): readonly [BreakerSite, BreakerSite] {
   const polygon = layout.water_polygon_xz;
@@ -53,6 +74,8 @@ export function createGameWater(renderer: T.WebGLRenderer, scene: T.Scene, layou
   const paintedSun = new T.Color();
   const paintedSky = new T.Color();
   const paintedDirection = new T.Vector3();
+  const stages = stagePalettes[layout.proposed_three_slot];
+  const style: ExpeditionWaterStyle = { ...palette('#074467', '#79cdb7', 0, 0, 0), caustics: 1, foamGain: 1, lamps: 1 };
   let paintSettings: LabSettings | undefined;
   return {
     select(mode: Mode, settings: LabSettings) {
@@ -65,18 +88,34 @@ export function createGameWater(renderer: T.WebGLRenderer, scene: T.Scene, layou
     renderPasses: collection.renderPasses,
     renderScene: collection.renderScene,
     ripple: collection.ripple,
+    clearRipples: collection.clearRipples,
     emitWake: collection.emitWake,
-    update(time: number, wrath: number, frame: CollectionFrame) {
-      locationSurface.clarity.value = 1 - T.MathUtils.smoothstep(wrath, .05, .70);
+    update(time: number, wrath: number, frame: CollectionFrame, visualStage: number, tuning?: WaterTuning) {
+      const stage = T.MathUtils.clamp(visualStage, 0, 2);
+      const low = Math.floor(stage);
+      const a = stages[low], b = stages[Math.min(2, low + 1)];
+      const blend = stage - low;
+      style.deep.copy(a.deep).lerp(b.deep, blend);
+      style.shallow.copy(a.shallow).lerp(b.shallow, blend);
+      const grading = tuning?.waterGrade ?? 1;
+      style.mixing = Math.min(.96, T.MathUtils.lerp(a.mixing, b.mixing, blend) * grading);
+      style.foam = T.MathUtils.lerp(a.foam, b.foam, blend);
+      style.foamGain = tuning?.foam ?? 1;
+      style.glints = Math.pow(T.MathUtils.lerp(a.glints, b.glints, blend), grading);
+      style.caustics = tuning?.caustics ?? 1;
+      style.lamps = tuning?.lamps ?? 1;
+      // A small optical window persists over the bronze while the rest of the basin darkens.
+      locationSurface.clarity.value = T.MathUtils.lerp(1, .87, stage / 2);
       if (!paintSettings) {
-        collection.update(time, wrath, frame);
+        collection.update(time, wrath, { ...frame, expedition: style });
         return;
       }
       paintedSun.set(paintSettings.sun ?? '#faf0cd');
       paintedSky.set(paintSettings.sky ?? '#59757a');
       if (frame.sky) paintedSky.lerp(frame.sky, .36 + .64 * wrath);
       paintedDirection.set(-.57, (paintSettings.elevation ?? .82) * 1.6, -.81).normalize();
-      collection.update(time, wrath, { ...frame, sky: paintedSky, sunColor: paintedSun, sunDirection: paintedDirection });
+      collection.update(time, wrath, { ...frame, expedition: style, sky: paintedSky,
+        sunColor: paintedSun, sunDirection: paintedDirection });
     },
     dispose() {
       collection.dispose();
