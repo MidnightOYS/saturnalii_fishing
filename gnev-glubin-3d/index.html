@@ -14,7 +14,7 @@
     <header id="game-header" class="top">
       <div class="wordmark"><span class="sigil" aria-hidden="true">♆</span><strong>Гнев глубин</strong></div>
       <div class="status">
-        <button id="water-settings-toggle" type="button" data-action="water-settings" aria-controls="game-water-inspector" aria-expanded="false">Вода</button>
+        <button id="water-settings-toggle" type="button" data-action="water-settings" aria-controls="game-water-inspector" aria-expanded="false">Визуал</button>
         <span><span id="gold">0</span> др.</span>
         <span>Опыт <span id="xp">0</span></span>
       </div>
@@ -58,9 +58,39 @@
       </div>
     </section>
 
-    <aside id="game-water-inspector" aria-label="Настройки воды" hidden>
-      <button type="button" class="water-settings-close" data-action="water-settings" aria-label="Закрыть настройки воды">×</button>
-      <div id="game-water-controls"></div>
+    <aside id="game-water-inspector" aria-labelledby="visual-inspector-title" hidden>
+      <div class="visual-inspector-header">
+        <h2 id="visual-inspector-title">Инспектор визуала</h2>
+        <button type="button" class="water-settings-close" data-action="water-settings" aria-label="Закрыть инспектор">×</button>
+      </div>
+      <div class="visual-tabs" role="tablist" aria-label="Параметры визуала"></div>
+      <div class="visual-scroll">
+        <section id="visual-water" role="tabpanel"><div id="game-water-controls"></div></section>
+        <section id="visual-light" role="tabpanel" hidden>
+          <div class="visual-section">
+            <label class="visual-select" for="visual-stage">
+              <span>Предпросмотр стадии</span>
+              <select id="visual-stage">
+                <option value="auto">По игре</option>
+                <option value="0">I · Тихая вода</option>
+                <option value="1">II · Знамение</option>
+                <option value="2">III · Ярость</option>
+              </select>
+            </label>
+            <p class="visual-help">Меняет картинку вылазки. Игровой гнев продолжает расти.</p>
+          </div>
+          <div class="visual-section">
+            <h3>Свет и небо</h3>
+            <label class="visual-select" for="visual-sky-tint"><span>Оттенок неба</span><input type="color" id="visual-sky-tint" value="#ffffff"></label>
+            <div id="visual-light-fields"></div>
+          </div>
+        </section>
+        <section id="visual-effects" role="tabpanel" hidden>
+          <div class="visual-section"><h3>Вода и окружение</h3><div id="visual-effects-fields"></div></div>
+          <div class="visual-section"><h3>Игровые сигналы</h3><div id="visual-signal-fields"></div></div>
+        </section>
+      </div>
+      <div class="visual-inspector-footer"><button id="visual-reset" type="button">Сбросить свет и эффекты</button></div>
     </aside>
     <dialog id="menu" aria-labelledby="menu-title"><div id="menu-content"></div></dialog>
     <section id="hold" role="dialog" aria-modal="true" aria-labelledby="hold-title" hidden></section>

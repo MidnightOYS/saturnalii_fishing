@@ -1,9 +1,11 @@
 import './style.css';
+import './visual-inspector.css';
 import { counter, fish, zones } from './rules/game.js';
 import { Expedition } from './expedition';
 import { disposeLocation, loadLocation, type LoadedLocation } from './location-assets';
 import type { LocationSlot } from './location-navigation';
 import { createScene } from './scene';
+import { makeVisualInspector } from './visual-inspector';
 import { defaultCollection, readCollection } from './water-lab/collection-settings';
 import { makeLabUI } from './water-lab/collection-ui';
 
@@ -58,6 +60,10 @@ const menu = byId<HTMLDialogElement>('menu');
 const waterInspector = byId('game-water-inspector');
 const waterSettingsToggle = byId<HTMLButtonElement>('water-settings-toggle');
 if (scene) {
+  makeVisualInspector(waterInspector, tuning => {
+    scene?.setVisualTuning(tuning);
+    byId('game').style.setProperty('--expedition-vignette', String(tuning.vignette));
+  });
   let profile = defaultCollection(true);
   try {
     const saved = localStorage.getItem(waterSaveKey);

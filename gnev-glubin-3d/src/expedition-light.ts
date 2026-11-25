@@ -37,12 +37,13 @@ export function createExpeditionLighting(renderer: T.WebGLRenderer, scene: T.Sce
     uGlow: { value: 1 },
   };
   const sky = new T.Mesh(new T.SphereGeometry(90, 24, 12), new T.ShaderMaterial({
-    uniforms: skyUniforms, side: T.BackSide, depthTest: false, depthWrite: false,
+    uniforms: skyUniforms, side: T.BackSide, depthWrite: false,
     vertexShader: `
       varying vec3 vDirection;
       void main() {
         vDirection = position;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        gl_Position.z = gl_Position.w;
       }
     `,
     fragmentShader: `
@@ -63,18 +64,18 @@ export function createExpeditionLighting(renderer: T.WebGLRenderer, scene: T.Sce
   }));
   sky.visible = false;
   sky.frustumCulled = false;
-  sky.renderOrder = -100;
+  sky.renderOrder = 100;
   scene.add(sky, sun.target);
 
   // Only static expedition geometry casts shadows. Its map is redrawn once per location.
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.autoUpdate = false;
+  renderer.shadowMap.type = T.BasicShadowMap;
   sun.shadow.mapSize.set(1024, 1024);
   Object.assign(sun.shadow.camera, { left: -34, right: 34, top: 34, bottom: -34, near: 1, far: 96 });
   sun.shadow.camera.updateProjectionMatrix();
   sun.shadow.bias = -.00035;
   sun.shadow.normalBias = .05;
-  sun.shadow.radius = 1.5;
 
   const dockDirection = sun.position.clone().normalize();
   const skyTint = new T.Color();
@@ -89,8 +90,9 @@ export function createExpeditionLighting(renderer: T.WebGLRenderer, scene: T.Sce
       sun.position.copy(sun.target.position).addScaledVector(sunDirection, 52);
       root.traverse(object => {
         if (!(object instanceof T.Mesh)) return;
-        object.receiveShadow = true;
-        object.castShadow = !object.name.endsWith('_Seabed');
+        const aboveWater = !object.name.endsWith('_Seabed');
+        object.receiveShadow = aboveWater;
+        object.castShadow = aboveWater;
       });
       sun.castShadow = true;
       sun.shadow.needsUpdate = renderer.shadowMap.needsUpdate = true;
@@ -128,7 +130,7 @@ export function createExpeditionLighting(renderer: T.WebGLRenderer, scene: T.Sce
       fill.intensity = T.MathUtils.lerp(from.fillPower, to.fillPower, blend) * tuning.fill;
     },
     render(camera: T.Camera, draw: () => void) {
-      if (!profile) {
+      if (!profile || !(camera instanceof T.PerspectiveCamera)) {
         draw();
         return;
       }

@@ -11,8 +11,19 @@
 .game-water-collection .lab-panel { padding: 0; }
 .game-water-collection .lab-collection-nav {
   width: 100%;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  background: #172526;
+  border-color: #ffffff18;
   box-shadow: none;
 }
-.game-water-collection .lab-mode-row { grid-template-columns: 62px minmax(0, 1fr); }
-.game-water-collection .lab-collection-nav .lab-nav button { padding-inline: 6px; }
+.game-water-collection .lab-mode-row { grid-template-columns: 68px minmax(0, 1fr); }
+.game-water-collection .lab-collection-nav .lab-nav button { padding-inline: 7px; border-radius: 5px; }
+.game-water-collection .lab-nav button[aria-pressed="true"],
+.game-water-collection .lab-presets button[aria-pressed="true"] { color: #daf5e9; background: #254139; border-color: #76b39c85; }
+.game-water-collection .lab-tech { margin: 0 0 12px; }
+.game-water-collection .lab-tech h2 { font-size: .98rem; letter-spacing: -.015em; }
+.game-water-collection .lab-tech p { color: var(--muted); }
+.game-water-collection .lab-extra { border-radius: 6px; }
+.game-water-collection button:focus-visible,
+.game-water-collection summary:focus-visible { outline: 2px solid #a1d6c4; outline-offset: 2px; }
