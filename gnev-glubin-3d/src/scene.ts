@@ -384,7 +384,7 @@ export function createScene(host: HTMLElement, game: Expedition, markers: Record
     return pick.ray.intersectPlane(aimPlane, pointing) ? { x: pointing.x, z: pointing.z } : null;
   }
 
-  renderer.domElement.addEventListener('pointerup', event => {
+  renderer.domElement.addEventListener('click', event => {
     if (event.button !== 0 || game.run || game.result || !ithaca) return;
     rayAt(event.clientX, event.clientY);
     const { shop, workshop, polyphemus } = ithaca.targets;
@@ -545,8 +545,6 @@ export function createScene(host: HTMLElement, game: Expedition, markers: Record
     sky.position.copy(hub.cameraFrom);
     dockSun.shadow.needsUpdate = true;
     resize();
-    dockStatus.textContent = '';
-    dockUI.dataset.ithaca = 'ready';
   }).catch(error => {
     dockStatus.textContent = 'Итака не загрузилась. Обнови страницу, чтобы повторить.';
     console.warn('Ithaca models could not be loaded', error);
@@ -602,7 +600,7 @@ export function createScene(host: HTMLElement, game: Expedition, markers: Record
     }
     lighting.update(visualStage, visualTuning);
     (scene.background as T.Color).copy(fog.color);
-    sky.visible = horizon.visible = water.visible = atDock;
+    sky.visible = horizon.visible = water.visible = atDock && Boolean(ithaca);
     if (ithaca) ithaca.root.visible = mooring.visible = atDock;
     else mooring.visible = false;
     boat.visible = Boolean(run || ithaca);
@@ -902,6 +900,10 @@ export function createScene(host: HTMLElement, game: Expedition, markers: Record
       lighting.render(camera, () => { depth = locationWater.renderScene(camera, captureDepth); });
       return depth;
     });
+    if (atDock && ithaca && !dockUI.dataset.ithaca) {
+      dockStatus.textContent = '';
+      dockUI.dataset.ithaca = 'ready';
+    }
   }
 
   update(0);
