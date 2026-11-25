@@ -4,6 +4,7 @@ import { gzipSync } from 'node:zlib';
 
 const dist = new URL('../dist/', import.meta.url);
 const demoModels = ['boat', 'bobber', 'dock_deck', 'rod'];
+const gameBoatModels = ['blind-eye/boat', 'blind-eye/boat-oar', 'blind-eye/boat-sail-rig'];
 const locations = ['moon-cistern', 'bronze-harbor'];
 
 async function standalone(entry, output, assets = [], maps = []) {
@@ -18,9 +19,11 @@ async function standalone(entry, output, assets = [], maps = []) {
     readFile(new URL(style[1], source), 'utf8'),
     readFile(new URL('third-party-licenses.md', source), 'utf8'),
     Promise.all([...assets, ...maps.map(name => `locations/${name}`)].map(async path => {
-      const name = path.split('/').at(-1);
+      const boatModel = path.startsWith('blind-eye/');
+      const basename = path.split('/').at(-1);
+      const name = boatModel ? `blind-eye-${basename}` : basename;
       const bytes = await readFile(new URL(`models/${path}.glb`, source));
-      const compressed = path.startsWith('locations/');
+      const compressed = boatModel || path.startsWith('locations/');
       const encoded = (compressed ? gzipSync(bytes, { level: 9 }) : bytes).toString('base64');
       return `<script type="application/octet-stream" data-model="${name}"${compressed ? ' data-compression="gzip"' : ''}>${encoded}</script>`;
     })),
@@ -41,7 +44,7 @@ async function standalone(entry, output, assets = [], maps = []) {
   console.log('Standalone browser build:', fileURLToPath(destination));
 }
 
-await standalone('index.html', 'gnev-glubin-3d.html', [], locations);
+await standalone('index.html', 'gnev-glubin-3d.html', gameBoatModels, locations);
 await standalone('water/water-demo.html', 'gnev-glubin-water.html', demoModels);
 await standalone('watercolor/watercolor-demo.html', 'gnev-glubin-watercolor.html', demoModels);
 await standalone('water-lab/water-lab.html', 'gnev-glubin-water-lab.html', demoModels);

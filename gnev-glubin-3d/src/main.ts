@@ -122,6 +122,7 @@ let selectedZone: LocationSlot = 'pond';
 let loadingLocation: AbortController | null = null;
 let mapNotice = '';
 let shopNotice = '';
+let fittingSail = false;
 let inspectingHold = false;
 let lastPhaseLabel = '';
 let arrivalUntil = 0;
@@ -140,8 +141,8 @@ function updateDock() {
   byId('gold').textContent = String(game.meta.gold);
   byId('xp').textContent = String(game.meta.xp);
   byId('dock-goal').textContent = game.meta.boat
-    ? 'Лодка починена. Теперь можно выйти в Гавань затонувшего лика.'
-    : 'Выполни квоту в Лунном водосборе. Продай улов и почини лодку, чтобы открыть Гавань затонувшего лика.';
+    ? 'Парус установлен. Теперь можно выйти в Гавань затонувшего лика.'
+    : 'Выполни квоту в Лунном водосборе. Продай улов и купи парус, чтобы открыть Гавань затонувшего лика.';
 }
 
 function showDock() {
@@ -220,18 +221,18 @@ function renderMenu() {
       const isLocked = id === 'temple' && !game.meta.boat;
       return `<button class="location" data-action="zone" data-id="${id}" aria-pressed="${selectedZone === id}" ${loadingLocation ? 'disabled' : ''}>
         <span class="eyebrow">${zone.number}</span><strong>${info.name}</strong>
-        <small>${info.description}</small>${isLocked ? '<p>Требуется ремонт лодки</p>' : ''}</button>`;
+        <small>${info.description}</small>${isLocked ? '<p>Требуется парус из лавки</p>' : ''}</button>`;
     }).join('');
     menuContent.innerHTML = `${heading('Выбор места', 'Лодка')}<div class="locations">${cards}</div>
       <div class="button-row"><span>Подношения · ${game.meta.offerings}</span>
-      <button class="primary" data-action="sail" ${locked || loadingLocation || !scene ? 'disabled' : ''}>Выйти на воду</button></div>
-      <p class="map-notice" role="status">${loadingLocation ? 'Загружаем локацию…' : mapNotice}</p>`;
+      <button class="primary" data-action="sail" ${locked || loadingLocation || fittingSail || !scene ? 'disabled' : ''}>Выйти на воду</button></div>
+      <p class="map-notice" role="status">${loadingLocation ? 'Готовим лодку и локацию…' : fittingSail ? 'Устанавливаем парус…' : mapNotice}</p>`;
   } else if (currentMenu === 'shop') {
     const catchForSale = Object.entries(game.meta.sales) as [FishId, number][];
     const value = catchForSale.reduce((sum, [id, amount]) => sum + price(id) * amount, 0);
     const catchNames = catchForSale.map(([id, count]) => `${fish[id].name} × ${count}`).join(' · ');
     const upgrades = [
-      { id: 'boat', name: 'Ремонт лодки', effect: 'Открывает Гавань затонувшего лика.' },
+      { id: 'boat', name: 'Парус для лодки', effect: 'Заменяет вёсла и открывает Гавань затонувшего лика.' },
       { id: 'line', name: 'Крепкая леска', effect: 'Натяжение нарастает медленнее.' },
       { id: 'offering', name: 'Подношение', effect: 'Снижает гнев до стадии Ярости.' }
     ] as const;
@@ -242,9 +243,11 @@ function renderMenu() {
       ${upgrades.map(({ id, name, effect }) => {
         const cost = game.balance.economy[id];
         const bought = id !== 'offering' && game.meta[id];
+        const fitting = id === 'boat' && fittingSail;
+        const status = bought ? (id === 'boat' ? 'Установлен' : 'Куплена') : fitting ? 'Устанавливаем…' : cost + ' др.';
         return `<div class="menu-row"><div><strong>${name}</strong><small>${effect}</small></div>
-          <button data-action="buy" data-id="${id}" aria-label="${bought ? name + ' выполнен' : name + ' · ' + cost + ' др.'}"
-          ${bought || !game.meta.quotaMet || game.meta.gold < cost ? 'disabled' : ''}>${bought ? 'Готово' : cost + ' др.'}</button></div>`;
+          <button data-action="buy" data-id="${id}" aria-label="${name} · ${status}"
+          ${bought || fittingSail || !game.meta.quotaMet || game.meta.gold < cost ? 'disabled' : ''}>${status}</button></div>`;
       }).join('')}
       <p id="shop-notice" role="status">${shopNotice}</p>`;
   } else if (currentMenu === 'result' && game.result) {
@@ -464,7 +467,7 @@ function processEvents() {
 }
 
 async function sail() {
-  if (!scene || loadingLocation || (selectedZone === 'temple' && !game.meta.boat)) return;
+  if (!scene || loadingLocation || fittingSail || (selectedZone === 'temple' && !game.meta.boat)) return;
   const request = new AbortController();
   const zone = selectedZone;
   loadingLocation = request;
@@ -473,6 +476,17 @@ async function sail() {
   let unattached: LoadedLocation | undefined;
   let attached = false;
   try {
+    if (game.meta.boat) {
+      try {
+        await scene.prepareSail();
+      } catch (error) {
+        if (request.signal.aborted) return;
+        mapNotice = 'Парус не загрузился. Попробуй выйти на воду ещё раз.';
+        console.warn('Sail model could not be loaded', error);
+        return;
+      }
+      if (request.signal.aborted) return;
+    }
     unattached = await loadLocation(zone, request.signal);
     if (loadingLocation !== request) return;
     const { layout } = unattached;
@@ -497,6 +511,27 @@ async function sail() {
   closeMenu();
   processEvents();
   renderWater();
+}
+
+async function buySail() {
+  if (!scene || fittingSail || game.meta.boat || !game.meta.quotaMet || game.meta.gold < game.balance.economy.boat) return;
+  fittingSail = true;
+  shopNotice = 'Устанавливаем парус…';
+  renderMenu();
+  try {
+    await scene.prepareSail();
+    if (game.buy('boat')) {
+      shopNotice = 'Парус установлен. Гавань затонувшего лика открыта.';
+      save();
+      updateDock();
+    }
+  } catch (error) {
+    shopNotice = 'Парус не загрузился. Попробуй купить его ещё раз.';
+    console.warn('Sail model could not be loaded', error);
+  } finally {
+    fittingSail = false;
+    if (currentMenu === 'shop' || currentMenu === 'map') renderMenu();
+  }
 }
 
 function action(button: HTMLButtonElement) {
@@ -533,8 +568,10 @@ function action(button: HTMLButtonElement) {
       renderMenu();
       break;
     case 'buy':
-      if (id && game.buy(id)) {
-        shopNotice = id === 'boat' ? 'Лодка готова. Гавань затонувшего лика открыта.' : 'Покупка сделана.';
+      if (id === 'boat') {
+        void buySail();
+      } else if (id && game.buy(id)) {
+        shopNotice = 'Покупка сделана.';
         save();
         updateDock();
         renderMenu();
@@ -716,13 +753,19 @@ let previousFrame = performance.now();
 function frame(now: number) {
   const dt = Math.min((now - previousFrame) / 1000, .05);
   previousFrame = now;
+  let boatSpeed = 0;
   if (game.run && !menu.open && !document.hidden) {
     if ((game.aiming || game.drawing) && pointer) game.target = scene?.pointAt(pointer.clientX, pointer.clientY, game.aiming) ?? null;
+    const run = game.run;
+    const { x, z } = game.position;
     game.step(dt);
+    if (dt > 0 && game.run === run) {
+      boatSpeed = Math.hypot(game.position.x - x, game.position.z - z) / dt;
+    }
     processEvents();
     renderWater();
   }
-  scene?.update(dt);
+  scene?.update(dt, boatSpeed);
   requestAnimationFrame(frame);
 }
 

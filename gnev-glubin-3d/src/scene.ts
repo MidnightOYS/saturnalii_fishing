@@ -1,4 +1,5 @@
 import * as T from 'three';
+import { createBoatVisualLoader, type BoatVisual } from './boat-visual';
 import { createExpeditionLighting } from './expedition-light';
 import { between, distance, schoolRadius, waterCamera, type Expedition, type Point } from './expedition';
 import { disposeLocation, type LoadedLocation } from './location-assets';
@@ -7,6 +8,8 @@ import { createGameWater } from './location-water';
 import { defaultVisualTuning, type VisualTuning } from './visual-tuning';
 import type { CollectionCamera } from './water-lab/collection';
 import { defaultCollectionSettings, type LabSettings, type Mode } from './water-lab/collection-settings';
+
+const createBlindEye = createBoatVisualLoader();
 
 const waves = [
   { x: 0.91, z: 0.59, speed: 1.52, weight: 0.54 },
@@ -130,7 +133,7 @@ function createBoat() {
   for (const z of [-.96, .11, .99]) {
     box(boat, '#a98254', 0, .26, z, z === .11 ? 1.70 : 1.38, .12, .24);
   }
-  return { boat, skin };
+  return boat;
 }
 
 function createTerrain() {
@@ -300,7 +303,29 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
   const { water, uniforms } = waterSurface();
   const { dock, stall } = createDock();
   const { horizon, harbor } = createTerrain();
-  const { boat, skin } = createBoat();
+  const boat = createBoat();
+  const fallbackParts = [...boat.children];
+  let blindEye: BoatVisual | undefined;
+  let boatLoading: Promise<BoatVisual> | undefined;
+  function loadBoat() {
+    return boatLoading ??= createBlindEye().then(visual => {
+      blindEye = visual;
+      // Match the GLB's deeper sole to the game's water plane.
+      visual.root.position.y = .16;
+      boat.add(visual.root);
+      for (const part of fallbackParts) part.visible = false;
+      return visual;
+    }).catch(error => {
+      boatLoading = undefined;
+      throw error;
+    });
+  }
+  async function prepareSail() {
+    const visual = await loadBoat();
+    await visual.prepareSail();
+  }
+  const initialEquipment = game.meta.boat ? prepareSail() : loadBoat();
+  void initialEquipment.catch(error => console.warn('Boat model could not be loaded', error));
   const fisher = new T.Group();
   mesh(fisher, new T.CapsuleGeometry(.23, .50, 3, 8), '#8f5f43', 0, .85, .36);
   mesh(fisher, new T.IcosahedronGeometry(.20, 1), '#c8996f', 0, 1.37, .35);
@@ -395,7 +420,8 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
     rayAt(event.clientX, event.clientY);
     for (const hit of pick.intersectObjects([stall, boat, dock], true)) {
       let object: T.Object3D | null = hit.object;
-      while (object && object !== stall && object !== boat && object !== dock) object = object.parent;
+      while (object?.visible && object !== stall && object !== boat && object !== dock) object = object.parent;
+      if (!object?.visible) continue;
       if (object === stall) markers[0].click();
       if (object === boat) markers[1].click();
       break;
@@ -408,6 +434,7 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
   let waterMode: Mode = 'refraction';
   let waterSettings = defaultCollectionSettings(waterMode, true);
   let previousPhase = '';
+  let previousRun: Expedition['run'] = null;
   let hadFishingCast = false;
   let rippledMiss: Expedition['missedCast'] = null;
   let rippledImpact: Expedition['impact'] = null;
@@ -517,11 +544,14 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
   new ResizeObserver(resize).observe(host);
   resize();
 
-  function update(dt: number) {
+  function update(dt: number, boatSpeed = 0) {
     time += dt;
     const run = game.run;
     const atDock = !run;
     const firstPerson = game.firstPerson && !game.aiming;
+    if (run !== previousRun) blindEye?.resetSail();
+    previousRun = run;
+    blindEye?.update(game.meta.boat ? 'sail' : 'rowing', atDock, firstPerson, boatSpeed, dt, time);
     if (atDock) {
       visualStage = 0;
       clearLocation();
@@ -601,7 +631,6 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
       spray.scale.setScalar(2 + run.age * 9);
     }
 
-    skin.material.color.set(game.meta.boat ? '#a0774c' : '#835d3e');
     fisher.visible = !!run && !firstPerson;
     dog.visible = !!run;
     rodPivot.visible = firstPerson || run?.phase === 'cast';
@@ -653,7 +682,8 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
       proj.copy(index === 0 ? stall.position : boat.position);
       proj.y += index === 0 ? 1.9 : .88;
       proj.project(camera);
-      marker.style.left = `${T.MathUtils.clamp((proj.x + 1) * width / 2, 55, width - 55)}px`;
+      const labelOffset = index === 1 ? Math.min(width * .12, 140) : 0;
+      marker.style.left = `${T.MathUtils.clamp((proj.x + 1) * width / 2 + labelOffset, 55, width - 55)}px`;
       marker.style.top = `${T.MathUtils.clamp((1 - proj.y) * height / 2, height * .29, height * .86)}px`;
     }
 
@@ -835,7 +865,7 @@ export function createScene(host: HTMLElement, game: Expedition, markers: HTMLEl
 
   update(0);
   return {
-    update, pointAt, setLocation, clearLocation, selectWater,
+    update, pointAt, setLocation, clearLocation, selectWater, prepareSail,
     setVisualTuning(tuning: VisualTuning) {
       visualTuning = { ...tuning };
     },
