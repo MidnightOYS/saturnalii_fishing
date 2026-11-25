@@ -1,0 +1,599 @@
+#game {
+  --tide-ink: #061518;
+  --tide-text: #f8eedb;
+  --tide-muted: #bfd0c8;
+  --tide-gold: #ffcb78;
+  --tide-sea: #8cebd5;
+  --tide-coral: #ffad95;
+  --tide-violet: #d7b9ff;
+  --tide-button: url('./art/button.png');
+  --tide-active: url('./art/button-active.png');
+  --tide-danger: url('./art/button-danger.png');
+  --tide-locked: url('./art/button-locked.png');
+  --tide-plate: url('./art/plate-compact.png');
+  --tide-bezel: url('./art/keycap.png');
+  --tide-track: url('./art/bar-track.png');
+  --tide-cyan-fill: url('./art/bar-cyan.png');
+  --tide-amber-fill: url('./art/bar-amber.png');
+  --tide-coral-fill: url('./art/bar-coral.png');
+  --tide-violet-fill: url('./art/bar-violet.png');
+  --tide-edge: #98764c7a;
+  --tide-drop: 0 5px 8px #0009;
+  --hud-inset: clamp(14px, 2.2vw, 36px);
+  color: var(--tide-text);
+  font-variant-numeric: tabular-nums;
+}
+
+#game :where(.status, .water-actions, .panel-head, .button-row, .cargo-actions, .phase, .hotspot) button:focus-visible,
+#game :where(.location, .cell, .hotspot):focus-visible {
+  outline: 2px solid var(--tide-sea);
+  outline-offset: 2px;
+}
+
+/* Coasting / dock */
+#game .top { border: 0; padding: 8px var(--hud-inset); }
+#game:not([data-expedition]) .top { align-items: flex-start; }
+#game .wordmark {
+  align-items: center;
+  justify-content: center;
+  width: clamp(195px, 25vw, 325px);
+  height: clamp(56px, 7.2vw, 87px);
+  padding: min(2.7vw, 32px) 8px 0 17px;
+  background: url('./art/plate-wide.png') center / 100% 100% no-repeat;
+  filter: drop-shadow(var(--tide-drop));
+  font-size: clamp(14px, 1.6vw, 23px);
+  white-space: nowrap;
+}
+#game .wordmark strong { padding-left: 7%; text-shadow: 0 2px 4px #000; }
+#game .sigil { display: none; }
+#game .status, #game[data-expedition] .status {
+  border: 0;
+  padding: 0;
+  background: none;
+  gap: 6px;
+  color: var(--tide-text);
+  font-size: .8rem;
+}
+#game .status > span {
+  border: 9px solid transparent;
+  border-width: 4px 9px;
+  border-image: var(--tide-bezel) 7 15 7 15 fill stretch;
+  min-height: 38px;
+  padding: 2px 5px 2px 28px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .22em;
+  white-space: nowrap;
+  filter: drop-shadow(var(--tide-drop));
+}
+#game .status span[id] { color: var(--tide-gold); font-weight: 750; }
+.status > span:has(#gold) { --tide-icon: url('./art/coin.png'); }
+.status > span:has(#xp) { --tide-icon: url('./art/xp.png'); }
+.status > span::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  width: 23px;
+  height: 23px;
+  background: var(--tide-icon) center / contain no-repeat;
+}
+#game:not([data-expedition]) .status { margin-top: 12px; }
+
+#game #dock .place {
+  top: clamp(105px, 20vh, 205px);
+  left: var(--hud-inset);
+  max-width: min(380px, 70vw);
+  padding: 16px 24px 16px 17px;
+  background: linear-gradient(95deg, #06131be8 3%, #06131b8c 60%, transparent);
+  border-left: 2px solid #f7ba62b0;
+  text-shadow: 0 2px 5px #000;
+}
+#game .eyebrow, #game .readouts label span { color: var(--tide-gold); }
+#game h1, #game h2 { color: var(--tide-text); }
+#game .place p { color: var(--tide-text); text-wrap: pretty; line-height: 1.5; }
+
+/* Controls and surface treatments */
+#game :is(.water-actions, .panel-head, .button-row, .cargo-actions, .menu-row, .phase) > button,
+#game :is(.hotspot, #water-settings-toggle, .water-settings-close) {
+  --tide-button-art: var(--tide-button);
+  position: relative;
+  border: solid transparent;
+  border-width: 7px 10px 7px 23px;
+  border-image: var(--tide-button-art) 11 40 11 83 fill stretch;
+  border-radius: 0;
+  padding: 3px 5px 4px;
+  min-height: 38px;
+  background: none;
+  color: var(--tide-text);
+  font-size: .9rem;
+  text-shadow: 0 1px 4px #000;
+  filter: drop-shadow(var(--tide-drop));
+}
+#game :is(.water-actions, .panel-head, .button-row, .cargo-actions, .menu-row, .phase) > button:is(:hover, [aria-pressed="true"]):not(:disabled),
+#game :is(.hotspot, #water-settings-toggle, .water-settings-close):is(:hover, [aria-expanded="true"]):not(:disabled),
+#game :is(.button-row, .menu-row) > .primary:not(:disabled),
+#game .phase > [data-action="primary"] {
+  --tide-button-art: var(--tide-active);
+  background: none;
+  color: var(--tide-gold);
+}
+#game .button-row > button:is([data-action="confirm-return"], [data-action="release"]):not(:disabled),
+#game .cargo-actions > button[data-action="release-old"]:not(:disabled) {
+  --tide-button-art: var(--tide-danger);
+}
+#game :is(.water-actions, .button-row, .menu-row, .cargo-actions) > button:disabled,
+#game #water-settings-toggle:disabled {
+  --tide-button-art: var(--tide-locked);
+  opacity: .8;
+  color: #b1c1bd;
+}
+#game :is(.water-actions, .button-row, .menu-row, .cargo-actions, .phase) > button:active:not(:disabled) {
+  filter: brightness(.83) drop-shadow(0 2px 4px #0008);
+}
+#game :is(#water-settings-toggle, .phase > button, .cargo-actions > button) {
+  min-height: 32px;
+  font-size: .8rem;
+}
+#game .panel-head > button,
+#game #game-water-inspector .water-settings-close {
+  position: relative;
+  display: grid;
+  place-content: center;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 35px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: url('./art/close.png') center / contain no-repeat;
+  color: transparent;
+  text-shadow: none;
+}
+#game .panel-head > button:hover:not(:disabled),
+#game #game-water-inspector .water-settings-close:hover:not(:disabled) {
+  color: transparent;
+  background: url('./art/close.png') center / contain no-repeat;
+  filter: brightness(1.35);
+}
+#game .hotspot {
+  position: absolute;
+  padding-inline: 5px 10px;
+  gap: 4px;
+  min-height: 48px;
+  font-size: 1.03rem;
+}
+#game .hotspot > span {
+  width: 29px;
+  height: 29px;
+  background: var(--tide-icon) center / contain no-repeat;
+  transform: none;
+  border: 0;
+  pointer-events: none;
+}
+#dock-shop { --tide-icon: url('./art/shop.png'); }
+#dock-boat { --tide-icon: url('./art/anchor.png'); }
+#game kbd {
+  color: var(--tide-gold);
+  border: 4px solid transparent;
+  border-width: 3px 5px;
+  border-image: var(--tide-bezel) 7 15 7 15 fill stretch;
+  padding: 1px 3px;
+  border-radius: 0;
+  line-height: 1.04;
+  text-shadow: 0 1px 4px #000;
+}
+
+/* Expedition */
+#game .readouts {
+  padding: 0;
+  gap: 6px;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  align-items: stretch;
+}
+#game .readouts > div {
+  position: relative;
+  display: grid;
+  align-content: center;
+  padding: 5px 10px 5px 27px;
+  border: solid transparent;
+  border-width: 5px 8px;
+  border-image: var(--tide-bezel) 7 15 7 15 fill stretch;
+  background: none;
+  color: var(--tide-muted);
+  gap: 0;
+  filter: drop-shadow(var(--tide-drop));
+  font-size: .76rem;
+}
+#game .readouts > div::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 25px;
+  height: 25px;
+  background: var(--tide-icon) center / contain no-repeat;
+}
+#game .readouts strong { color: var(--tide-text); font-size: 1rem; line-height: 1.15; }
+.readouts > div:has(#quota) { --tide-icon: url('./art/quota.png'); }
+.readouts > div:has(#health) { --tide-icon: url('./art/health.png'); }
+.wrath-status { --tide-icon: url('./art/wrath.png'); min-width: 153px; }
+#game #stage { margin-top: 2px; color: var(--tide-stage-color, var(--tide-sea)); }
+#fishing[data-stage="2"] { --tide-stage-color: var(--tide-violet); }
+#fishing[data-stage="3"] { --tide-stage-color: var(--tide-coral); }
+#game .zone-intro {
+  border: solid transparent;
+  border-width: 7px 11px;
+  border-image: var(--tide-bezel) 7 15 7 15 fill stretch;
+  border-radius: 0;
+  background: none;
+  color: var(--tide-text);
+  filter: drop-shadow(var(--tide-drop));
+}
+#game .zone-intro p { color: var(--tide-muted); }
+#game .water-actions { gap: 5px; top: calc(var(--hud-inset) + 45px); }
+#game .water-actions > button { font-size: .81rem; white-space: nowrap; }
+#game .water-actions > button::before {
+  content: '';
+  width: 22px;
+  height: 22px;
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 4px;
+  margin-left: -6px;
+  background: var(--tide-icon) center / contain no-repeat;
+}
+.water-actions [data-action="bow"] { --tide-icon: url('./art/bow.png'); }
+.water-actions [data-action="hold"] { --tide-icon: url('./art/hold.png'); }
+.water-actions [data-action="offering"] { --tide-icon: url('./art/offering.png'); }
+.water-actions [data-action="return"] { --tide-icon: url('./art/return.png'); }
+
+#game .fishing-bottom { width: max-content; max-width: min(640px, calc(100% - 2 * var(--hud-inset))); }
+#game .phase {
+  --tide-phase-art: var(--tide-plate);
+  border: 0;
+  min-height: 48px;
+  background: var(--tide-phase-art) center / 100% 100% no-repeat;
+  border-radius: 0;
+  padding: 12px clamp(25px, 6vw, 78px);
+  filter: drop-shadow(var(--tide-drop));
+}
+#game .phase[data-phase="ready"] { min-height: 56px; padding-block: 17px 13px; }
+#game .phase strong { font: 600 1.12rem/1.18 Georgia, serif; color: var(--tide-gold); }
+#game .phase span { color: var(--tide-text); }
+#game .phase:is([data-phase="hook"], [data-phase="struggle"], [data-phase="reel"]) { --tide-phase-art: var(--tide-active); }
+#game .phase[data-phase="surge"] { --tide-phase-art: var(--tide-danger); }
+#game .phase[data-phase="surge"] strong { color: var(--tide-coral); }
+#game #notice, #game #attack {
+  border: solid transparent;
+  border-width: 7px 12px 7px 28px;
+  border-image: var(--tide-active) 17 48 14 85 fill stretch;
+  border-radius: 0;
+  background: none;
+  padding: 3px 9px;
+  filter: drop-shadow(var(--tide-drop));
+}
+#game #attack {
+  border-image-source: var(--tide-danger);
+  padding-inline: 3px 10px;
+  color: var(--tide-coral);
+  max-width: calc(100% - 28px);
+  white-space: normal;
+  text-align: center;
+}
+#game #attack::before {
+  content: '';
+  display: inline-block;
+  vertical-align: middle;
+  background: url('./art/attack.png') center / contain no-repeat;
+  width: 28px;
+  height: 28px;
+  margin-right: 4px;
+}
+#game .fight {
+  width: min(368px, calc(100vw - 2 * var(--hud-inset)));
+  border: solid transparent;
+  border-width: 5px 9px;
+  border-image: var(--tide-bezel) 7 15 7 15 fill stretch;
+  background: none;
+  padding: 4px 9px;
+  filter: drop-shadow(var(--tide-drop));
+  font-variant-numeric: tabular-nums;
+}
+#game .fight label { color: var(--tide-text); }
+
+#game .tide-meter, #game .timing {
+  position: relative;
+  height: 16px;
+  min-width: 92px;
+  background: var(--tide-track) center / 100% 100% no-repeat;
+  --tide-fill: var(--tide-cyan-fill);
+}
+#game .tide-meter:has(#wrath) { height: 13px; }
+#game [data-stage="2"] .tide-meter:has(#wrath) { --tide-fill: var(--tide-violet-fill); }
+#game [data-stage="3"] .tide-meter:has(#wrath),
+#game .tide-meter:has(#tension) { --tide-fill: var(--tide-coral-fill); }
+#game .tide-meter:has(#cast-charge, #bow-draw) { --tide-fill: var(--tide-amber-fill); }
+#game .tide-meter::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--tide-fill) center / 100% 100% no-repeat;
+  clip-path: inset(0 var(--tide-clip, 100%) 0 0);
+  pointer-events: none;
+}
+#game .tide-meter > progress {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  opacity: 0;
+}
+#game .timing {
+  width: min(356px, calc(100vw - 2 * var(--hud-inset)));
+  height: 23px;
+  border: 0;
+  border-radius: 0;
+  margin-top: 8px;
+  filter: drop-shadow(var(--tide-drop));
+}
+#game .tide-timing-range { position: absolute; inset: 30% 8.75%; }
+#game .timing span { background: var(--tide-cyan-fill) center / 130% 240% no-repeat, #50c9ab; }
+#game .timing[data-hit="true"] span { background: var(--tide-sea); box-shadow: 0 0 9px #48eac997; }
+#game .timing i {
+  height: 25px;
+  width: 14px;
+  top: 50%;
+  transform: translate(-50%, -48%) rotate(180deg);
+  background: url('./art/marker-hud.png') center / contain no-repeat;
+  filter: drop-shadow(0 1px 2px #000);
+}
+
+/* Map, shop, hold and journey results */
+#game :is(#menu, #hold) {
+  --tide-frame-pad: clamp(28px, 4vw, 49px);
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--tide-text);
+  box-shadow: none;
+  filter: drop-shadow(0 16px 30px #000c);
+  scrollbar-color: #805d3d #091719;
+}
+#game #menu { width: min(774px, calc(100% - 26px)); }
+#game #hold { width: min(650px, calc(100% - 22px)); max-height: min(83%, 780px); }
+#game :is(#menu-content, #hold) {
+  border: solid transparent;
+  border-width: 23px 26px 18px;
+  border-image: url('./art/frame.png') 176 176 128 238 fill stretch;
+  border-image-width: 66px 58px 45px 83px;
+  padding: 24px var(--tide-frame-pad) 22px;
+}
+#game #menu::backdrop { background: #010b14aa; backdrop-filter: blur(3px); }
+#game .hold-cover { background: #010b14ad; }
+#game .panel-head { margin-bottom: 17px; align-items: start; }
+#game .panel-head h2 { margin-top: 4px; text-shadow: 0 2px 5px #0008; }
+#game .panel-head .eyebrow { margin-bottom: 0; }
+#game #menu-content:has(.locations) .panel-head .eyebrow::before {
+  content: '';
+  display: inline-block;
+  width: 21px;
+  height: 21px;
+  margin-right: 5px;
+  vertical-align: middle;
+  background: url('./art/map.png') center / contain no-repeat;
+}
+#game :is(.menu-row, .location) small, #game .panel-text { color: var(--tide-muted); }
+#game .panel-text { text-wrap: pretty; }
+#game .locations { gap: 12px; }
+#game .location {
+  display: grid;
+  position: relative;
+  align-content: start;
+  align-items: start;
+  grid-template-rows: auto auto auto 1fr;
+  gap: 6px;
+  border: solid transparent;
+  border-width: 7px 8px;
+  border-image: var(--tide-bezel) 7 15 7 15 fill stretch;
+  border-radius: 0;
+  background: none;
+  padding: 5px 7px 8px;
+  min-width: 0;
+}
+#game .location::before {
+  content: '';
+  display: block;
+  height: clamp(90px, 13vw, 156px);
+  background: var(--tide-map-art) center / 100% 100% no-repeat;
+}
+#game .location[data-id="pond"] { --tide-map-art: url('./art/pond.png'); }
+#game .location[data-id="temple"] { --tide-map-art: url('./art/temple.png'); }
+#game .location:is([aria-pressed="true"], :hover):not(:disabled) {
+  background: none;
+  box-shadow: 0 0 0 1px #ffcd738c, 0 0 18px #ffbb5737;
+}
+#game .location[aria-pressed="true"] strong { color: var(--tide-gold); }
+#game .location[data-locked="true"]::before { filter: saturate(.46) brightness(.7); }
+#game .location[data-locked="true"] .eyebrow::after {
+  content: '';
+  width: 22px;
+  height: 22px;
+  position: absolute;
+  right: 10px;
+  top: 9px;
+  background: url('./art/lock.png') center / contain no-repeat;
+  filter: drop-shadow(0 1px 3px #000);
+}
+#game .location p { color: #ffd297; }
+#game .location strong { font-size: clamp(17px, 2.3vw, 23px); line-height: 1.1; }
+#game .button-row { align-items: center; }
+#game .button-row > span { color: var(--tide-muted); }
+#game .menu-row {
+  border: solid transparent;
+  border-width: 6px 11px;
+  border-image: var(--tide-bezel) 7 15 7 15 fill stretch;
+  padding: 4px 4px 4px 2px;
+  gap: 10px;
+}
+#game .menu-row + .menu-row { margin-top: 5px; }
+#game .menu-row > div:first-child { flex: 1; min-width: 0; }
+#game .menu-row > button { flex: 0 0 auto; }
+#game .menu-row::before {
+  content: '';
+  display: block;
+  flex: 0 0 47px;
+  height: 47px;
+  background: var(--tide-item, url('./art/quota.png')) center / contain no-repeat;
+}
+.menu-row:has([data-id="boat"]) { --tide-item: url('./art/sail.png'); }
+.menu-row:has([data-id="line"]) { --tide-item: url('./art/line.png'); }
+.menu-row:has([data-id="offering"]) { --tide-item: url('./art/offering.png'); }
+#game #shop-notice:not(:empty) { margin-top: 10px; color: var(--tide-gold); }
+#game .tide-result-art {
+  height: clamp(112px, 27vh, 229px);
+  margin: 0 0 14px;
+  background: var(--tide-result-art) center / contain no-repeat;
+}
+.tide-result-art[data-outcome="success"] { --tide-result-art: url('./art/success.png'); }
+.tide-result-art[data-outcome="failure"] { --tide-result-art: url('./art/failure.png'); }
+#game .report { border-color: var(--tide-edge); color: var(--tide-muted); gap: 8px 22px; }
+#game .report strong { color: var(--tide-gold); }
+#game .tide-result-art[data-outcome="failure"] ~ .report strong { color: var(--tide-coral); }
+
+#game .pending {
+  justify-content: flex-start;
+  gap: 6px 10px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--tide-edge);
+  padding-bottom: 8px;
+}
+#game .pending strong { font: 600 1.2rem/1.1 Georgia, serif; }
+#game .pending span { margin-left: auto; color: var(--tide-muted); }
+#game .pending::before {
+  content: '';
+  width: 58px;
+  height: 48px;
+  background: var(--tide-fish, url('./art/quota.png')) center / contain no-repeat;
+}
+#game .cargo-grid { gap: 5px; isolation: isolate; }
+#game .cell {
+  position: relative;
+  border: solid transparent;
+  border-width: 5px 7px;
+  border-image: var(--tide-bezel) 7 15 7 15 fill stretch;
+  border-radius: 0;
+  background: none;
+}
+#game .cell:disabled { opacity: .65; }
+#game .cell[data-preview]::after {
+  z-index: 2;
+  content: '';
+  position: absolute;
+  inset: -2px -3px;
+  pointer-events: none;
+}
+#game .cell[data-preview="fits"]::after {
+  background: #1aeabe42;
+  box-shadow: inset 0 0 0 1px #7cf1d4, inset 0 0 10px #49ffe05e;
+}
+#game .cell[data-preview="blocked"]::after {
+  background: #d64c3c40;
+  box-shadow: inset 0 0 0 1px #ff9b7f, inset 0 0 10px #f75d4966;
+}
+#game .cargo-item {
+  z-index: 1;
+  margin: 2px;
+  color: var(--tide-text);
+  place-content: center;
+  text-shadow: 0 1px 3px #000, 0 2px 3px #000;
+  background:
+    linear-gradient(transparent 25%, #061516e0 78%),
+    var(--tide-fish, url('./art/quota.png')) center 35% / contain no-repeat,
+    color-mix(in srgb, var(--fish) 19%, var(--tide-ink));
+  border-color: color-mix(in srgb, var(--fish), transparent 28%);
+  border-radius: 2px;
+  font-size: clamp(.61rem, 1.4vw, .78rem);
+  align-content: end;
+}
+[data-fish="mullet"] { --tide-fish: url('./art/mullet.png'); }
+[data-fish="perch"] { --tide-fish: url('./art/perch.png'); }
+[data-fish="oracle"] { --tide-fish: url('./art/oracle.png'); }
+[data-fish="viper"] { --tide-fish: url('./art/viper.png'); }
+[data-fish="crown"] { --tide-fish: url('./art/crown.png'); }
+
+#game #game-water-inspector {
+  border-color: #b8925d;
+  background: #071921;
+  scrollbar-color: #99714a #071921;
+}
+#game .visual-inspector-header { border-bottom: 1px solid var(--tide-edge); margin-bottom: 7px; }
+#game .visual-tabs button[aria-selected="true"] {
+  background: #263c38;
+  border-color: #d6a75a8a;
+  color: var(--tide-gold);
+}
+
+@media (max-width: 860px) {
+  #game #attack { top: calc(var(--hud-inset) + 93px); }
+  #game .water-actions { gap: 3px; }
+  #game .water-actions > button { border-left-width: 15px; padding-inline: 2px; }
+  #game .water-actions > button::before { width: 17px; height: 17px; margin-left: -3px; margin-right: 2px; }
+}
+@media (max-width: 675px) {
+  #game .water-actions { top: calc(var(--hud-inset) + 76px); left: var(--hud-inset); }
+  #game #attack { top: calc(var(--hud-inset) + 124px); }
+  #game .zone-intro { margin-top: 52px; }
+  #game #menu-content, #game #hold {
+    border-width: 15px 14px 12px;
+    border-image-width: 57px 45px 35px 64px;
+    padding: 32px 16px 17px;
+  }
+  #game .location::before { height: clamp(66px, 15vw, 106px); }
+  #game .phase { padding-inline: 26px; }
+}
+@media (max-width: 470px) {
+  #game .top { padding-inline: 9px; }
+  #game .wordmark { width: 145px; height: 46px; padding-top: 12px; font-size: .85rem; }
+  #game:not([data-expedition]) .status { margin-top: 4px; gap: 3px; }
+  #game:not([data-expedition]) .status > span { min-height: 30px; padding-inline: 20px 0; font-size: .67rem; }
+  #game:not([data-expedition]) .status > span::before { width: 17px; height: 17px; left: 0; }
+  #game #water-settings-toggle { border-left-width: 13px; padding-inline: 1px; }
+  #game .readouts { gap: 3px; }
+  #game .readouts > div { padding: 4px 3px 4px 17px; border-inline-width: 5px; font-size: .63rem; }
+  #game .readouts > div::before { width: 16px; height: 16px; left: -1px; }
+  #game .readouts strong { font-size: .86rem; }
+  #game .wrath-status { min-width: 116px; }
+  #game .water-actions { right: 10px; left: 10px; }
+  #game .water-actions > button { font-size: .7rem; min-height: 34px; }
+  #game .water-actions > button::before { width: 13px; height: 13px; }
+  #game .menu-row::before { flex-basis: 32px; height: 35px; }
+  #game .menu-row > button { font-size: .76rem; border-left-width: 14px; }
+  #game .locations { grid-template-columns: 1fr; gap: 6px; }
+  #game .location {
+    grid-template-columns: minmax(78px, .7fr) minmax(0, 1.3fr);
+    grid-template-rows: repeat(4, auto);
+    gap: 3px 8px;
+  }
+  #game .location::before {
+    grid-area: 1 / 1 / 5 / 2;
+    align-self: center;
+    height: auto;
+    aspect-ratio: 540 / 318;
+  }
+  #game .location > * { grid-column: 2; }
+  #game .location[data-locked="true"] .eyebrow::after { top: 8px; left: 8px; }
+  #game .phase[data-phase="ready"] {
+    border: solid transparent;
+    border-width: 5px 8px;
+    border-image: var(--tide-bezel) 7 15 7 15 fill stretch;
+    padding: 8px 10px;
+    background: none;
+  }
+  #game .zone-intro { margin-top: 104px; }
+  #game #attack { top: calc(var(--hud-inset) + 166px); }
+}

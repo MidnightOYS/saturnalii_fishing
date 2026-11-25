@@ -7,6 +7,16 @@ const demoModels = ['boat', 'bobber', 'dock_deck', 'rod'];
 const gameBoatModels = ['blind-eye/boat', 'blind-eye/boat-oar', 'blind-eye/boat-sail-rig'];
 const locations = ['moon-cistern', 'bronze-harbor'];
 
+async function inlinePngs(css, stylesheet) {
+  const pngUrl = /url\((['"]?)(?:\.\/)?([a-z0-9_/-]+\.png)\1\)/gi;
+  const paths = new Set([...css.matchAll(pngUrl)].map(match => match[2]));
+  const images = new Map(await Promise.all([...paths].map(async path => {
+    const bytes = await readFile(new URL(path, stylesheet));
+    return [path, `data:image/png;base64,${bytes.toString('base64')}`];
+  })));
+  return css.replace(pngUrl, (_, quote, path) => `url(${images.get(path)})`);
+}
+
 async function standalone(entry, output, assets = [], maps = []) {
   const source = new URL(entry, dist);
   const page = await readFile(source, 'utf8');
@@ -14,9 +24,10 @@ async function standalone(entry, output, assets = [], maps = []) {
   const style = page.match(/<link rel="stylesheet"[^>]* href="([^"]+)"[^>]*>/);
   if (!script || !style) throw new Error(`Expected one entry script and stylesheet for ${entry}.`);
 
+  const stylesheet = new URL(style[1], source);
   const [code, css, licenses, models, layouts] = await Promise.all([
     readFile(new URL(script[1], source), 'utf8'),
-    readFile(new URL(style[1], source), 'utf8'),
+    readFile(stylesheet, 'utf8').then(css => inlinePngs(css, stylesheet)),
     readFile(new URL('third-party-licenses.md', source), 'utf8'),
     Promise.all([...assets, ...maps.map(name => `locations/${name}`)].map(async path => {
       const boatModel = path.startsWith('blind-eye/');

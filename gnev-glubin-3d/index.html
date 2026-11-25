@@ -29,7 +29,7 @@
     <section id="fishing" aria-labelledby="zone-name" tabindex="-1" hidden>
       <div class="fishing-status">
         <div class="readouts">
-          <div class="wrath-status"><label for="wrath">Гнев <span id="wrath-number"></span></label><progress id="wrath" max="100" value="0"></progress><span id="stage"></span></div>
+          <div class="wrath-status"><label for="wrath">Гнев <span id="wrath-number"></span></label><div class="tide-meter"><progress id="wrath" max="100" value="0"></progress></div><span id="stage"></span></div>
           <div><span>Здоровье</span><strong id="health"></strong></div>
           <div><span>Квота</span><strong id="quota"></strong></div>
         </div>
@@ -48,12 +48,12 @@
       <div class="fishing-bottom">
         <p id="notice" role="status"></p>
         <div id="phase" class="phase" aria-live="polite"></div>
-        <div id="cast-meter" class="fight" hidden><div><label for="cast-charge">Дальность заброса <span id="cast-distance"></span></label><progress id="cast-charge" max="1" value="0"></progress></div></div>
-        <div id="bow-meter" class="fight" hidden><div><label for="bow-draw">Натяжение лука</label><progress id="bow-draw" max="1" value="0"></progress></div></div>
-        <div id="timing" class="timing" hidden><span id="timing-band"></span><i id="marker"></i></div>
+        <div id="cast-meter" class="fight" hidden><div><label for="cast-charge">Дальность заброса <span id="cast-distance"></span></label><div class="tide-meter"><progress id="cast-charge" max="1" value="0"></progress></div></div></div>
+        <div id="bow-meter" class="fight" hidden><div><label for="bow-draw">Натяжение лука</label><div class="tide-meter"><progress id="bow-draw" max="1" value="0"></progress></div></div></div>
+        <div id="timing" class="timing" hidden><div class="tide-timing-range"><span id="timing-band"></span><i id="marker"></i></div></div>
         <div id="fight" class="fight" hidden>
-          <div><label for="tension">Натяжение <span id="tension-number"></span></label><progress id="tension" max="100" value="0"></progress></div>
-          <div><label for="distance">Леска <span id="distance-number"></span></label><progress id="distance" value="0"></progress></div>
+          <div><label for="tension">Натяжение <span id="tension-number"></span></label><div class="tide-meter"><progress id="tension" max="100" value="0"></progress></div></div>
+          <div><label for="distance">Леска <span id="distance-number"></span></label><div class="tide-meter"><progress id="distance" value="0"></progress></div></div>
         </div>
       </div>
     </section>

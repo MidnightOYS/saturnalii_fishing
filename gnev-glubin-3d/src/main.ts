@@ -1,5 +1,6 @@
 import './style.css';
 import './visual-inspector.css';
+import './hud-tide/theme.css';
 import { counter, fish, zones } from './rules/game.js';
 import { Expedition } from './expedition';
 import { disposeLocation, loadLocation, type LoadedLocation } from './location-assets';
@@ -26,6 +27,12 @@ function byId<T extends HTMLElement = HTMLElement>(id: string): T {
 
 function setText(node: HTMLElement, text: string) {
   if (node.textContent !== text) node.textContent = text;
+}
+
+function paintMeter(progress: HTMLProgressElement, value: number) {
+  progress.value = value;
+  const clip = 91.25 - 82.5 * progress.value / progress.max;
+  progress.parentElement?.style.setProperty('--tide-clip', `${clip}%`);
 }
 
 function readProgress(): Partial<Meta> {
@@ -219,7 +226,7 @@ function renderMenu() {
       const id = zone.id as LocationSlot;
       const info = locationInfo[id];
       const isLocked = id === 'temple' && !game.meta.boat;
-      return `<button class="location" data-action="zone" data-id="${id}" aria-pressed="${selectedZone === id}" ${loadingLocation ? 'disabled' : ''}>
+      return `<button class="location" data-action="zone" data-id="${id}" data-locked="${isLocked}" aria-pressed="${selectedZone === id}" ${loadingLocation ? 'disabled' : ''}>
         <span class="eyebrow">${zone.number}</span><strong>${info.name}</strong>
         <small>${info.description}</small>${isLocked ? '<p>Требуется парус из лавки</p>' : ''}</button>`;
     }).join('');
@@ -259,6 +266,7 @@ function renderMenu() {
     };
     menuContent.innerHTML = `${heading(result.success ? 'Улов доставлен' : 'Вылазка сорвалась',
       locationInfo[result.zone as LocationSlot].name, false)}
+      <div class="tide-result-art" data-outcome="${result.success ? 'success' : 'failure'}" aria-hidden="true"></div>
       <p class="panel-text">${result.success ? 'Улов можно продать в лавке на причале.' : details[result.reason]}</p>
       <div class="report"><span><strong>${result.count + Number(!result.success && result.lostPending)}</strong>${result.success ? 'Рыб доставлено' : 'Рыб потеряно'}</span>
       <span><strong>${result.score} / ${game.balance.economy.quota}</strong>Квота</span>
@@ -289,7 +297,7 @@ function renderWater() {
   const stage = game.stage;
   water.dataset.stage = String(stage);
   setText(hud.stage, `${['I', 'II', 'III'][stage - 1]} · ${stages[stage - 1]}`);
-  hud.wrath.value = run.wrath;
+  paintMeter(hud.wrath, run.wrath);
   setText(hud.wrathNumber, `${Math.round(run.wrath)}%`);
   setText(hud.quota, `${game.score} / ${game.balance.economy.quota}`);
   setText(hud.health, `${run.health} / ${game.balance.wrath.health}`);
@@ -303,10 +311,10 @@ function renderWater() {
   hud.bow.disabled = phase === 'surge';
   hud.bow.setAttribute('aria-pressed', String(game.aiming));
   hud.bowMeter.hidden = !game.aiming;
-  hud.draw.value = game.charge;
+  paintMeter(hud.draw, game.charge);
   hud.castMeter.hidden = game.aiming || !game.drawing;
   if (!hud.castMeter.hidden) {
-    hud.castCharge.value = game.charge;
+    paintMeter(hud.castCharge, game.charge);
     const preview = game.castPreview;
     const range = preview ? Math.hypot(preview.point.x - game.position.x, preview.point.z - game.position.z) : 0;
     setText(hud.castDistance, `${range.toFixed(1)} м`);
@@ -323,10 +331,10 @@ function renderWater() {
     hud.timing.dataset.hit = String(game.marker >= bandStart && game.marker <= bandEnd);
   }
   if (!hud.fight.hidden) {
-    hud.tension.value = run.tension;
+    paintMeter(hud.tension, run.tension);
     setText(hud.tensionNumber, `${Math.round(run.tension)}%`);
     hud.distance.max = game.balance.fight.maxDistance;
-    hud.distance.value = run.distance;
+    paintMeter(hud.distance, run.distance);
     setText(hud.distanceNumber, `${run.distance.toFixed(1)} м`);
   }
 
@@ -380,7 +388,7 @@ function renderHold(focus = false) {
   const cargo = run.cargo.map(item => {
     const [w, h] = game.dimensions(item);
     const kind = fish[item.id as FishId];
-    return `<div class="cargo-item" style="--fish:${kind.color};grid-area:${item.y + 1} / ${item.x + 1} / span ${h} / span ${w}">${kind.name} · ${item.count}</div>`;
+    return `<div class="cargo-item" data-fish="${item.id}" style="--fish:${kind.color};grid-area:${item.y + 1} / ${item.x + 1} / span ${h} / span ${w}">${kind.name} · ${item.count}</div>`;
   }).join('');
   const releaseOptions = run.cargo.map(item => `<button data-action="release-old" data-id="${item.key}">Выпустить · ${fish[item.id as FishId].name}</button>`).join('');
   const size = pending ? game.dimensions(pending).join(' × ') : '';
@@ -389,7 +397,7 @@ function renderHold(focus = false) {
   hold.innerHTML = `<header class="panel-head"><div><span class="eyebrow">Квота · ${game.score} / ${game.balance.economy.quota}</span>
     <h2 id="hold-title">${pending ? 'Уложить улов' : 'Трюм'}</h2></div>
     ${pending ? '' : '<button data-action="hold" aria-label="Закрыть трюм">×</button>'}</header>
-    ${kind && pending ? `<div class="pending" style="--fish:${kind.color}"><strong>${kind.name}</strong><span>${kind.tier} · ${size} · ${price(pending.id as FishId)} др.</span></div>
+    ${kind && pending ? `<div class="pending" data-fish="${pending.id}" style="--fish:${kind.color}"><strong>${kind.name}</strong><span>${kind.tier} · ${size} · ${price(pending.id as FishId)} др.</span></div>
     <p class="panel-text">Выбери левую верхнюю ячейку для рыбы.</p>` : ''}
     <div class="cargo-grid" style="--cols:${columns};--rows:${rows}">${cells}${cargo}</div>
     <div class="cargo-actions">${releaseOptions}</div>
