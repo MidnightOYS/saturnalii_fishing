@@ -249,6 +249,7 @@ export function createScene(host: HTMLElement, game: Expedition, markers: Record
   dockSun.shadow.autoUpdate = false;
   dockSun.shadow.mapSize.set(1024, 1024);
   Object.assign(dockSun.shadow.camera, { left: -25, right: 25, top: 22, bottom: -22, near: 1, far: 85 });
+  dockSun.shadow.camera.updateProjectionMatrix();
   dockSun.shadow.bias = -.00035;
   dockSun.shadow.normalBias = .05;
   scene.add(dockSun, dockSun.target);
