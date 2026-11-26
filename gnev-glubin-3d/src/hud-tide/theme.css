@@ -483,42 +483,61 @@
 #game .cargo-grid { gap: 5px; isolation: isolate; }
 #game .cell {
   position: relative;
-  border: solid transparent;
-  border-width: 5px 7px;
-  border-image: var(--tide-bezel) 7 15 7 15 fill stretch;
-  border-radius: 0;
-  background: none;
+  min-width: 0;
+  padding: 0;
+  border: 1px solid var(--gd-hold-grid);
+  border-radius: 3px;
+  background: var(--gd-hold-empty);
 }
-#game .cell:disabled { opacity: .65; }
-#game .cell[data-preview]::after {
-  z-index: 2;
-  content: '';
+#game .cell[data-cargo] {
+  border-color: var(--fish);
+  background: color-mix(in srgb, var(--fish) 30%, var(--gd-hold-empty));
+}
+#game .cell[data-draft] { border-style: dashed; opacity: .75; }
+#game .hold-placement { display: flex; align-items: center; gap: .7em; }
+#game .cargo-footprint {
+  display: grid;
+  grid-template-columns: repeat(var(--footprint-columns), 10px);
+  grid-auto-rows: 10px;
+  gap: 2px;
+}
+#game .cargo-footprint > i {
+  border: 1px solid var(--fish);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--fish) 40%, var(--gd-hold-empty));
+}
+#game .cargo-actions > button[aria-pressed="true"] {
+  border-color: var(--gd-selected-border);
+  background: var(--gd-selected-bg);
+  color: var(--gd-fg-primary);
+}
+#game[data-mobile-controls] .water-actions [data-action="hold"] kbd { display: none; }
+#game .cargo-cell-icon {
   position: absolute;
-  inset: -2px -3px;
+  inset: 2px;
+  pointer-events: none;
+  background: var(--tide-fish, url('./art/quota.png')) center / contain no-repeat;
+}
+#game .cell[data-preview]::after {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-weight: 750;
+  line-height: 1;
   pointer-events: none;
 }
 #game .cell[data-preview="fits"]::after {
-  background: #1aeabe42;
-  box-shadow: inset 0 0 0 1px #7cf1d4, inset 0 0 10px #49ffe05e;
+  content: '✓';
+  color: var(--gd-hold-valid);
+  outline: 2px solid currentColor;
+  background: color-mix(in srgb, currentColor 25%, var(--gd-hold-empty));
 }
 #game .cell[data-preview="blocked"]::after {
-  background: #d64c3c40;
-  box-shadow: inset 0 0 0 1px #ff9b7f, inset 0 0 10px #f75d4966;
-}
-#game .cargo-item {
-  z-index: 1;
-  margin: 2px;
-  color: var(--tide-text);
-  place-content: center;
-  text-shadow: 0 1px 3px #000, 0 2px 3px #000;
-  background:
-    linear-gradient(transparent 25%, #061516e0 78%),
-    var(--tide-fish, url('./art/quota.png')) center 35% / contain no-repeat,
-    color-mix(in srgb, var(--fish) 19%, var(--tide-ink));
-  border-color: color-mix(in srgb, var(--fish), transparent 28%);
-  border-radius: 2px;
-  font-size: clamp(.61rem, 1.4vw, .78rem);
-  align-content: end;
+  content: '!';
+  color: var(--gd-hold-invalid);
+  outline: 2px dashed currentColor;
+  background: color-mix(in srgb, currentColor 25%, var(--gd-hold-empty));
 }
 [data-fish="mullet"] { --tide-fish: url('./art/mullet.png'); }
 [data-fish="perch"] { --tide-fish: url('./art/perch.png'); }
@@ -597,3 +616,8 @@
   #game .zone-intro { margin-top: 104px; }
   #game #attack { top: calc(var(--hud-inset) + 166px); }
 }
+
+#game .stamina-status .tide-meter { --tide-fill: linear-gradient(var(--gd-meter-timing-zone), var(--gd-meter-timing-zone)); }
+#game .stamina-status .tide-meter[data-insufficient] { --tide-fill: linear-gradient(var(--gd-meter-tension), var(--gd-meter-tension)); }
+.stamina-status label { display: flex; justify-content: space-between; gap: 5px; }
+.stamina-status #stamina-number { color: var(--gd-fg-primary); font-size: inherit; }

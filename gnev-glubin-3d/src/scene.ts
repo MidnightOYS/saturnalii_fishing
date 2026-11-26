@@ -3,11 +3,12 @@ import { createBoatVisualLoader, type BoatVisual } from './boat-visual';
 import { enemyTiming } from './enemies';
 import { createEnemyVisuals } from './enemy-visuals';
 import { createExpeditionLighting } from './expedition-light';
-import { between, distance, schoolLimit, schoolRadius, waterCamera, type Expedition, type Point } from './expedition';
+import { between, distance, dockRadius, schoolLimit, schoolRadius, scareRadius, waterCamera, type Expedition, type Point } from './expedition';
 import { createIthacaSky, loadIthaca, type IthacaAction } from './ithaca';
 import { disposeLocation, type LoadedLocation } from './location-assets';
 import { createLocationEffects } from './location-environment';
 import { createGameWater } from './location-water';
+import { createSeaWaveVisuals } from './sea-wave-visuals';
 import { defaultVisualTuning, type VisualTuning } from './visual-tuning';
 import { createVisualPost } from './visual-effects/post';
 import type { CollectionCamera } from './water-lab/collection';
@@ -176,6 +177,7 @@ function schoolMarker() {
   const root = new T.Group();
   const boundary = ring('#a4d6ce', schoolRadius, .967);
   const specialBoundary = ring('#ca65ff', schoolRadius, .89);
+  const scareBoundary = ring('#f6d08c', scareRadius, .992);
   const ripples = [
     ring('#b9e9db', schoolRadius, .92, Math.PI * .66),
     ring('#b9e9db', schoolRadius, .94, Math.PI * .42)
@@ -186,8 +188,8 @@ function schoolMarker() {
     tail.rotation.z = Math.PI / 2;
     return body;
   });
-  root.add(boundary, specialBoundary, ...ripples);
-  return { root, boundary, specialBoundary, ripples, fish };
+  root.add(boundary, specialBoundary, scareBoundary, ...ripples);
+  return { root, boundary, specialBoundary, scareBoundary, ripples, fish };
 }
 
 function biteSpray() {
@@ -205,8 +207,8 @@ function biteSpray() {
   return { root, droplets, material };
 }
 
-function flightLift(range: number, bow: boolean) {
-  return bow ? Math.min(1.2, .38 + range * .07) : Math.min(2.1, .53 + range * .145);
+function flightLift(range: number) {
+  return Math.min(2.1, .53 + range * .145);
 }
 
 function sampleFlight(out: T.Vector3, start: T.Vector3, end: T.Vector3, lift: number, t: number) {
@@ -329,6 +331,7 @@ export function createScene(host: HTMLElement, game: Expedition, markers: Record
   const spots = Array.from({ length: schoolLimit }, schoolMarker);
   const bite = biteSpray();
   const enemies = createEnemyVisuals(scene);
+  const drawSeaWaves = createSeaWaveVisuals(scene, host);
   const warning = ring('#ff8059', .95);
   const weakSpot = new T.Mesh(new T.SphereGeometry(.10, 10, 7), new T.MeshBasicMaterial({ color: '#ffe2a5' }));
   warning.userData.waterSurfaceEffect = weakSpot.userData.waterSurfaceEffect = true;
@@ -359,7 +362,11 @@ export function createScene(host: HTMLElement, game: Expedition, markers: Record
   const stringPositions = new T.BufferAttribute(new Float32Array(9), 3);
   weapon.add(new T.Line(new T.BufferGeometry().setAttribute('position', stringPositions),
     new T.LineBasicMaterial({ color: '#ead5a8' })));
-  scene.add(sky, horizon, water, mooring, boat, float, line, floatRipple,
+  const returnRing = ring('#f6d08c', dockRadius, .977);
+  const returnCenter = ring('#f6d08c', .45, .85);
+  returnRing.add(returnCenter);
+  returnRing.visible = false;
+  scene.add(returnRing, sky, horizon, water, mooring, boat, float, line, floatRipple,
     ...spots.map(marker => marker.root), bite.root, spray, weapon, feather, aimLine, crosshair, splash);
 
   const pick = new T.Raycaster();
@@ -388,16 +395,14 @@ export function createScene(host: HTMLElement, game: Expedition, markers: Record
   renderer.domElement.addEventListener('click', event => {
     if (event.button !== 0 || game.run || game.result || !ithaca) return;
     rayAt(event.clientX, event.clientY);
-    const { shop, workshop, polyphemus } = ithaca.targets;
+    const targets = new Map<T.Object3D, IthacaAction>([[boat, 'map']]);
+    for (const [action, target] of Object.entries(ithaca.targets)) targets.set(target, action as IthacaAction);
     for (const hit of pick.intersectObjects([ithaca.root, boat], true)) {
       let action: IthacaAction | undefined;
       let visible = true;
       for (let object: T.Object3D | null = hit.object; object; object = object.parent) {
         visible &&= object.visible;
-        if (object === shop) action = 'shop';
-        if (object === workshop) action = 'workshop';
-        if (object === polyphemus) action = 'polyphemus';
-        if (object === boat) action = 'map';
+        action ??= targets.get(object);
       }
       if (!visible) continue;
       if (action) {
@@ -631,6 +636,7 @@ export function createScene(host: HTMLElement, game: Expedition, markers: Record
     const surface = locationWater
       ? (x: number, z: number) => locationWater.heightAt(x, z)
       : (x: number, z: number) => heightAt(x, z, time, amplitude);
+    drawSeaWaves(run ? game.waves : [], surface);
     boat.position.set(bx, (run ? .12 : ithaca?.boatPosition.y ?? 0) + surface(bx, bz), bz);
     if (blindEye) blindEye.root.position.y = run ? .16 : 0;
     boat.rotation.set(
@@ -671,7 +677,7 @@ export function createScene(host: HTMLElement, game: Expedition, markers: Record
     }
     if (atDock) {
       if (ithaca) {
-        ithaca.update(time);
+        ithaca.update(time, game.meta.artel.buildings);
         const start = ithaca.mooringPier;
         const end = boat.localToWorld(ropeEnd.copy(ithaca.mooringBoat));
         mooringPositions.setXYZ(0, start.x, start.y, start.z);
@@ -710,6 +716,13 @@ export function createScene(host: HTMLElement, game: Expedition, markers: Record
     camera.updateMatrixWorld();
     activeLocation?.effects.update(time, visualStage, surface, visualTuning);
 
+    const destination = game.returnPoint;
+    returnRing.visible = Boolean(run && destination && !firstPerson);
+    if (destination) {
+      returnRing.position.set(destination.x, surface(destination.x, destination.z) + .23, destination.z);
+      returnRing.material.opacity = game.atReturnPoint ? .95 : .58;
+    }
+
     const signalGain = visualTuning.signals;
     const castPreview = run && game.drawing && !game.aiming ? game.castPreview : null;
     for (const [i, marker] of spots.entries()) {
@@ -724,6 +737,8 @@ export function createScene(host: HTMLElement, game: Expedition, markers: Record
       marker.root.position.set(spot.x, surface(spot.x, spot.z) + .12, spot.z);
       marker.boundary.visible = !special;
       marker.specialBoundary.visible = special;
+      marker.scareBoundary.visible = !active && !firstPerson && distance(game.position, spot) < scareRadius + 2;
+      marker.scareBoundary.material.opacity = Math.min(1, .30 * signalGain);
       const boundary = special ? marker.specialBoundary : marker.boundary;
       boundary.material.color.set(hue);
       boundary.material.opacity = Math.min(1, (special ? .94 : selected ? .72 : .36) * clarity * signalGain);
@@ -770,7 +785,7 @@ export function createScene(host: HTMLElement, game: Expedition, markers: Record
       if (flight) {
         const t = Math.min(1, run.age / game.balance.aim.flight);
         flightEnd.set(spot.x, surface(spot.x, spot.z), spot.z);
-        sampleFlight(target, anchor, flightEnd, flightLift(castRange, false), t);
+        sampleFlight(target, anchor, flightEnd, flightLift(castRange), t);
       } else {
         const t = fighting ? Math.min(1.23, Math.max(Math.min(1, 2.05 / castRange), run.distance / castRange)) : 1;
         const point = between(game.position, spot, t);
@@ -810,7 +825,7 @@ export function createScene(host: HTMLElement, game: Expedition, markers: Record
       if (age < flightTime) {
         flightStart.set(start.x, surface(start.x, start.z) + 1.55, start.z);
         flightEnd.set(end.x, waterHeight, end.z);
-        sampleFlight(float.position, flightStart, flightEnd, flightLift(distance(start, end), false), age / flightTime);
+        sampleFlight(float.position, flightStart, flightEnd, flightLift(distance(start, end)), age / flightTime);
         float.visible = true;
       } else {
         const rippleAge = (age - flightTime) / .4;
@@ -845,7 +860,7 @@ export function createScene(host: HTMLElement, game: Expedition, markers: Record
       aimLine.material.color.set(color);
       flightStart.set(bx, boat.position.y + (bowAim ? 1.20 : 1.43), bz);
       flightEnd.set(aim.x, height, aim.z);
-      const lift = flightLift(distance(game.position, aim), Boolean(bowAim));
+      const lift = bowAim ? 0 : flightLift(distance(game.position, aim));
       for (let i = 0; i <= arcSegments; i += 1) {
         sampleFlight(arcPoint, flightStart, flightEnd, lift, i / arcSegments);
         arcPositions.setXYZ(i, arcPoint.x, arcPoint.y, arcPoint.z);
@@ -857,12 +872,10 @@ export function createScene(host: HTMLElement, game: Expedition, markers: Record
     feather.visible = Boolean(arrow);
     if (arrow) {
       const t = arrow.age / arrow.travel;
-      const lift = flightLift(distance(arrow.start, arrow.end), true);
       flightStart.set(arrow.start.x, surface(arrow.start.x, arrow.start.z) + 1.32, arrow.start.z);
       flightEnd.set(arrow.end.x, surface(arrow.end.x, arrow.end.z) + .15, arrow.end.z);
-      sampleFlight(arrowOrigin, flightStart, flightEnd, lift, t);
+      arrowOrigin.lerpVectors(flightStart, flightEnd, t);
       arrowDirection.subVectors(flightEnd, flightStart);
-      arrowDirection.y += 4 * lift * (1 - 2 * t);
       feather.position.copy(arrowOrigin);
       feather.lookAt(arrowOrigin.add(arrowDirection));
     }
@@ -911,6 +924,10 @@ export function createScene(host: HTMLElement, game: Expedition, markers: Record
   update(0);
   return {
     update, pointAt, setLocation, clearLocation, selectWater, prepareSail,
+    zoomBy(direction: number) {
+      expeditionCamera.zoom = T.MathUtils.clamp(expeditionCamera.zoom * (direction < 0 ? 1.12 : .89), .72, 1.45);
+      expeditionCamera.updateProjectionMatrix();
+    },
     setVisualTuning(tuning: VisualTuning) {
       visualTuning = { ...tuning };
     },

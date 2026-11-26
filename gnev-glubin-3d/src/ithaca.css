@@ -37,14 +37,29 @@
   box-shadow: 0 0 0 2px var(--gd-focus-inner);
 }
 
+#game #dock .hotspot[data-unbuilt] { border-style: dashed; }
+#game #dock #dock-boat { grid-column: 1 / -1; }
+
 #game #dock .hotspot > span {
+  flex: 0 0 21px;
   width: 21px;
   height: 21px;
 }
 
 #dock-workshop { --tide-icon: url('./hud-tide/art/sail.png'); }
+#dock-tasks { --tide-icon: url('./hud-tide/art/quota.png'); }
+#dock-shrine { --tide-icon: url('./hud-tide/art/offering.png'); }
+#dock-observatory { --tide-icon: url('./hud-tide/art/map.png'); }
 #dock-status { margin-top: 8px; }
 #dock-status:empty { display: none; }
+
+#game .artel-row { background: var(--gd-bg-raised); border-color: var(--gd-border-decor); }
+#game .artel-row small { color: var(--gd-fg-secondary); }
+#game .artel-row > button:not(:disabled) { color: var(--gd-currency); }
+#game .artel-row > button:disabled { color: var(--gd-disabled-fg); }
+#game .artel-row > button:focus-visible { outline-color: var(--gd-focus-outer); }
+.artel-bonus { color: var(--gd-currency); }
+.artel-notice { color: var(--gd-success-fg); min-height: 1.25em; margin: 10px 0 0; }
 
 @media (min-width: 720px) and (min-aspect-ratio: 6/5) {
   #game:not([data-mobile-controls]) #dock[data-ithaca="ready"] .dock-actions {
@@ -58,5 +73,14 @@
     left: var(--ithaca-x);
     top: var(--ithaca-y);
     transform: translate(-50%, -50%);
+    white-space: nowrap;
+    font-size: clamp(.76rem, 1.2vw, .9rem);
+  }
+}
+
+@media (max-height: 540px) and (orientation: landscape) {
+  #game[data-mobile-controls] #dock .dock-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: min(540px, calc(100% - 24px));
   }
 }

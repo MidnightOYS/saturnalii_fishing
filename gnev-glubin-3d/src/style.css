@@ -113,10 +113,6 @@ h2 { font-size: clamp(27px, 4vw, 42px); }
 .pending { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; }
 .pending strong { color: var(--fish); }
 .cargo-grid { display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); grid-template-rows: repeat(var(--rows), minmax(38px, 5.8vh)); gap: 4px; margin: 10px 0; }
-.cell { background: #1d302c; padding: 0; }
-.cell[data-preview="fits"] { border-color: #c7d9ad; background: #4d6554; }
-.cell[data-preview="blocked"] { border-color: #96584d; }
-.cargo-item { pointer-events: none; display: grid; place-items: center; background: color-mix(in srgb, var(--fish) 18%, #142321); color: var(--fish); border: 1px solid color-mix(in srgb, var(--fish), transparent 45%); border-radius: 3px; padding: 2px 5px; text-align: center; font-size: .77rem; line-height: 1.1; }
 .cargo-actions { display: flex; flex-wrap: wrap; gap: 5px; }
 .cargo-actions button { padding: 4px 7px; font-size: .75rem; }
 #hold-note { min-height: 18px; margin-top: 7px; color: #eaca91; font-size: .8rem; }

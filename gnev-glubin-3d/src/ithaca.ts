@@ -2,7 +2,7 @@ import * as T from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { readEmbeddedModel } from './location-assets';
 
-export type IthacaAction = 'shop' | 'workshop' | 'polyphemus' | 'map';
+export type IthacaAction = 'shop' | 'workshop' | 'polyphemus' | 'map' | 'tasks' | 'shrine' | 'observatory';
 
 const loader = new GLTFLoader();
 
@@ -47,15 +47,64 @@ export async function loadIthaca() {
 
   place(stall, 'interact_shop');
   place(workshop, 'interact_workshop');
+  const board = new T.Group();
+  board.name = 'Доска заданий';
+  board.position.set(2.48, .91, .72);
+  board.rotation.y = -.16;
+  const wood = new T.MeshStandardMaterial({ color: '#493023', roughness: .88 });
+  const frame = new T.MeshStandardMaterial({ color: '#875036', roughness: .79 });
+  const paper = new T.MeshStandardMaterial({ color: '#e2bc87', roughness: .94 });
+  function plank(w: number, h: number, d: number, x: number, y: number, z: number, material: T.Material) {
+    const mesh = new T.Mesh(new T.BoxGeometry(w, h, d), material);
+    mesh.position.set(x, y, z);
+    board.add(mesh);
+    return mesh;
+  }
+  for (const x of [-.69, .69]) plank(.14, 1.72, .15, x, .86, 0, wood);
+  plank(1.53, .89, .15, 0, 1.27, .015, frame);
+  plank(1.31, .69, .04, 0, 1.27, .104, wood);
+  for (const x of [-.39, 0, .39]) {
+    const note = plank(.29, .43, .021, x, 1.32 - Math.abs(x) * .13, .134, paper);
+    note.rotation.z = x * .38;
+  }
+  plank(1.69, .11, .25, 0, 1.72, .018, wood);
+  root.add(board);
   root.traverse(object => {
     if (object instanceof T.Mesh) object.castShadow = object.receiveShadow = true;
   });
 
-  // The terrace houses share one exported mesh. Use a hit volume at the parlor's facade.
-  const parlor = new T.Mesh(new T.BoxGeometry(3.02, 2.42, .36), new T.MeshBasicMaterial({ visible: false }));
-  parlor.position.set(-8.59, 4.03, -7.63);
+  // The facades share one exported mesh, so each entrance has its own hit volume.
+  const proxyMaterial = new T.MeshBasicMaterial({ visible: false });
+  function facade(name: string, point: [number, number, number], size: [number, number, number]) {
+    const proxy = new T.Mesh(new T.BoxGeometry(...size), proxyMaterial);
+    proxy.name = name;
+    proxy.position.set(...point);
+    root.add(proxy);
+    return proxy;
+  }
+  const parlor = facade('Полифем', [-8.59, 4.03, -7.63], [3.02, 2.42, .36]);
   parlor.rotation.y = .09;
-  root.add(parlor);
+  const shrine = facade('Святилище Посейдона', [1.43, 10.1, -20.2], [5.42, 4, .31]);
+  const observatory = facade('Обсерватория', [10.66, 12.7, -20.8], [4.25, 3.26, .31]);
+  const armillary = new T.Group();
+  armillary.name = 'Бронзовая армиллярная сфера';
+  armillary.position.set(10.66, 15.33, -22);
+  const bronze = new T.MeshStandardMaterial({ color: '#b27c43', metalness: .55, roughness: .46 });
+  const stand = new T.Mesh(new T.CylinderGeometry(.11, .24, .48, 8), bronze);
+  stand.position.y = -.79;
+  armillary.add(stand);
+  const band = new T.TorusGeometry(.6, .043, 6, 30);
+  for (const rotation of [0, Math.PI / 3, -Math.PI / 3]) {
+    const ring = new T.Mesh(band, bronze);
+    ring.rotation.set(.32, rotation, -.27);
+    armillary.add(ring);
+  }
+  const center = new T.Mesh(new T.SphereGeometry(.115, 10, 7), bronze);
+  armillary.add(center);
+  armillary.visible = false;
+  const observatoryTarget = new T.Group();
+  observatoryTarget.add(observatory, armillary);
+  root.add(observatoryTarget);
 
   const flames = [
     { name: 'fx_hearth', scale: .66 },
@@ -85,11 +134,14 @@ export async function loadIthaca() {
   const berth = anchor('interact_boat');
   const boatPosition = berth.getWorldPosition(new T.Vector3());
   const boatRotation = berth.getWorldQuaternion(new T.Quaternion());
-  const targets = { shop: stall, workshop, polyphemus: parlor };
+  const targets = { shop: stall, workshop, polyphemus: parlor, tasks: board, shrine, observatory: observatoryTarget };
   const labels = {
     shop: stall.position.clone().add(new T.Vector3(0, 2.85, .46)),
     workshop: workshop.position.clone().add(new T.Vector3(.25, 3.12, .24)),
     polyphemus: parlor.position.clone().add(new T.Vector3(0, 1.35, 0)),
+    tasks: board.position.clone().add(new T.Vector3(.94, 1.78, .1)),
+    shrine: shrine.position.clone().add(new T.Vector3(0, 2.16, 0)),
+    observatory: observatory.position.clone().add(new T.Vector3(0, 1.67, 0)),
     map: boatPosition.clone().add(new T.Vector3(0, 0, 2.4)),
   } satisfies Record<IthacaAction, T.Vector3>;
 
@@ -105,7 +157,10 @@ export async function loadIthaca() {
     cameraTarget: position('camera_dock_target'),
     horizontalFov: camera.userData.horizontal_fov_deg as number,
     referenceAspect: camera.userData.reference_aspect as number,
-    update(time: number) {
+    update(time: number, buildings: { shrine: number; observatory: number }) {
+      armillary.visible = buildings.observatory > 0;
+      flames[3].visible = buildings.shrine > 0;
+      flames[3].scale.setScalar(.47 + buildings.shrine * .09);
       hearthLight.intensity = 21 + Math.sin(time * 6.6) * 2.4;
       for (const [index, flame] of flames.entries()) {
         for (const [tongueIndex, tongue] of flame.children.entries()) {

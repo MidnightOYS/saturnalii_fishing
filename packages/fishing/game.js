@@ -45,8 +45,12 @@ class Pond {
     this.events.push({ name, ...data });
   }
 
+  canStart(id) {
+    return id !== 'temple' || this.meta.boat;
+  }
+
   start(id) {
-    if (this.run || this.result || (id === 'temple' && !this.meta.boat)) return false;
+    if (this.run || this.result || !this.canStart(id)) return false;
     const zone = zones.find(item => item.id === id);
     if (!zone) return false;
     this.inputs.clear();
@@ -240,16 +244,20 @@ class Pond {
       id: r.selected, key: r.serial++, count: 1, x: 0, y: 0, turned: false,
       size: [f.width, f.height]
     };
+    this.applyCatchEffects(r, f);
+    r.cast = null;
+    this.setPhase('pack');
+    this.emit('catch', { id: r.pending.id });
+    if (r.health <= 0) this.finish('health');
+  }
+
+  applyCatchEffects(r, f) {
     r.wrath = Math.min(100, r.wrath + f.wrath);
     if (f.damage > 0) {
       r.health -= f.damage;
       this.tell(fish[r.selected].name + ' ранит Одиссея.');
       this.emit('sting');
     }
-    r.cast = null;
-    this.setPhase('pack');
-    this.emit('catch', { id: r.pending.id });
-    if (r.health <= 0) this.finish('health');
   }
 
   dimensions(item) {

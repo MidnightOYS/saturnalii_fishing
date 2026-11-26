@@ -79,7 +79,8 @@ export class Polyphemus {
   constructor(
     private readonly ledger: Ledger,
     private readonly marketPrice: (id: FishId) => number,
-    private readonly random = Math.random
+    private readonly random = Math.random,
+    private readonly onRemove: (stake: FishStake) => void = () => {},
   ) {}
 
   recover() {
@@ -111,6 +112,7 @@ export class Polyphemus {
     if (count <= 0) return false;
     if (count === 1) delete stock[stake.id];
     else stock[stake.id] = count - 1;
+    this.onRemove(stake);
     return true;
   }
 

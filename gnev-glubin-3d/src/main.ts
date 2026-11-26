@@ -4,9 +4,11 @@ import './hud-tide/theme.css';
 import './polyphemus/style.css';
 import './hud-tide/red-figure-tokens.css';
 import './ithaca.css';
+import { cargoCells, rotateCargo, type Cargo } from './cargo';
 import { counter, fish, zones } from './rules/game.js';
+import { readArtelSave, type ArtelBuilding } from './artel';
 import { enemyNames, enemyTiming } from './enemies';
-import { Expedition } from './expedition';
+import { actionCost, distance, Expedition } from './expedition';
 import { conditionNames, readPolyphemusSave, stakeKey } from './polyphemus/rules';
 import { bindPolyphemusFrame, polyphemusResult, polyphemusRound, polyphemusSetup } from './polyphemus/view';
 import { disposeLocation, loadLocation, type LoadedLocation } from './location-assets';
@@ -21,7 +23,10 @@ const waterSaveKey = 'gnev-glubin-3d.water.v1';
 type Meta = InstanceType<typeof Expedition>['meta'];
 type FishId = keyof typeof fish;
 type Input = 'left' | 'right' | 'reel';
-type Menu = 'map' | 'shop' | 'workshop' | 'result' | 'exit' | 'polyphemus';
+type Menu = 'map' | 'shop' | 'workshop' | 'result' | 'polyphemus' | 'tasks' | 'shrine' | 'observatory';
+const menuBuilding: Partial<Record<Menu, ArtelBuilding>> = {
+  shop: 'market', workshop: 'station', shrine: 'shrine', observatory: 'observatory',
+};
 const locationInfo = {
   pond: { name: 'Лунный водосбор', description: 'Тихая вода у каменной цистерны. Первый косяк у пристани.' },
   temple: { name: 'Гавань затонувшего лика', description: 'Бронзовый лик под водой. Гнев растёт быстрее, редкий улов попадается чаще.' },
@@ -49,7 +54,7 @@ function readProgress(): Partial<Meta> {
       .filter(id => count(saved?.sales?.[id]) > 0)
       .map(id => [id, count(saved.sales[id])]));
     return {
-      gold: count(saved?.gold), xp: count(saved?.xp), sales, ...readPolyphemusSave(saved),
+      gold: count(saved?.gold), xp: count(saved?.xp), sales, ...readPolyphemusSave(saved), artel: readArtelSave(saved),
       boat: saved?.boat === true, line: saved?.line === true,
       quotaMet: saved?.quotaMet === true, visitedTemple: saved?.visitedTemple === true,
       ...(saved?.offerings === undefined ? {} : { offerings: count(saved.offerings) })
@@ -77,6 +82,7 @@ try {
   scene = createScene(sceneHost, game, {
     shop: byId('dock-shop'), workshop: byId('dock-workshop'),
     polyphemus: byId('dock-polyphemus'), map: byId('dock-boat'),
+    tasks: byId('dock-tasks'), shrine: byId('dock-shrine'), observatory: byId('dock-observatory'),
   });
 } catch (error) {
   byId('render-error').hidden = false;
@@ -123,15 +129,15 @@ hold.before(cover);
 
 const hud = {
   stage: byId('stage'), wrath: byId<HTMLProgressElement>('wrath'), wrathNumber: byId('wrath-number'),
-  quota: byId('quota'), health: byId('health'), offerings: byId('offerings'), notice: byId('notice'),
+  health: byId('health'), stamina: byId<HTMLProgressElement>('stamina'), staminaNumber: byId('stamina-number'),
+  notice: byId('notice'),
   phase: byId('phase'), timing: byId('timing'), band: byId('timing-band'), marker: byId('marker'),
   fight: byId('fight'), tension: byId<HTMLProgressElement>('tension'), tensionNumber: byId('tension-number'),
   distance: byId<HTMLProgressElement>('distance'), distanceNumber: byId('distance-number'), attack: byId('attack'),
-  bow: byId<HTMLButtonElement>('bow-button'), bowMeter: byId('bow-meter'), draw: byId<HTMLProgressElement>('bow-draw'),
+  bowMeter: byId('bow-meter'), draw: byId<HTMLProgressElement>('bow-draw'),
   mobileCast: byId<HTMLButtonElement>('mobile-cast'), mobileBow: byId<HTMLButtonElement>('mobile-bow'),
-  mobileFish: byId<HTMLButtonElement>('mobile-fish-action'), mobileSteer: byId('mobile-steer'),
+  mobileDash: byId<HTMLButtonElement>('mobile-dash'), mobileFish: byId<HTMLButtonElement>('mobile-fish-action'), mobileSteer: byId('mobile-steer'),
   castMeter: byId('cast-meter'), castCharge: byId<HTMLProgressElement>('cast-charge'), castDistance: byId('cast-distance'),
-  offeringButton: water.querySelector<HTMLButtonElement>('[data-action="offering"]')!,
   holdButton: water.querySelector<HTMLButtonElement>('[data-action="hold"]')!,
   returnButton: water.querySelector<HTMLButtonElement>('[data-action="return"]')!
 };
@@ -148,18 +154,17 @@ let drawPointer: number | null = null;
 let pointer: { clientX: number; clientY: number } | null = null;
 let waterTap: { id: number; x: number; y: number } | null = null;
 let mobileCastArmed = false;
-const stages = ['Тихая вода', 'Знамение', 'Ярость'];
+const stages = ['Волны', 'Волны и чудовища', 'Критический гнев'];
 let currentMenu: Menu | null = null;
 let selectedZone: LocationSlot = 'pond';
 let loadingLocation: AbortController | null = null;
 let mapNotice = '';
-let shopNotice = '';
-let workshopNotice = '';
+let artelNotice = '';
 let shopSalesExpanded = false;
 let selectedStake = '';
 let paintPolyphemus: ReturnType<typeof bindPolyphemusFrame> | null = null;
-let fittingSail = false;
 let inspectingHold = false;
+let cargoDraft: Cargo | null = null;
 let lastPhaseLabel = '';
 let arrivalUntil = 0;
 let hasCast = false;
@@ -176,9 +181,12 @@ function save() {
 function updateDock() {
   byId('gold').textContent = String(game.meta.gold);
   byId('xp').textContent = String(game.meta.xp);
-  byId('dock-goal').textContent = game.meta.boat
-    ? 'Парус установлен. Теперь можно выйти в Гавань затонувшего лика.'
-    : 'Выполни квоту в Лунном водосборе. Продай улов в рыбной лавке и купи парус в мастерской.';
+  for (const id of ['shrine', 'observatory'] as const) {
+    byId(`dock-${id}`).toggleAttribute('data-unbuilt', !game.meta.artel.buildings[id]);
+  }
+  byId('dock-goal').textContent = game.hull === 0
+    ? 'Перед выходом почини корпус на лодочной станции.'
+    : 'Продай улов на рынке и вложи выручку в развитие артели.';
 }
 
 function showDock() {
@@ -194,6 +202,7 @@ function clearInputs() {
   game.inputs.clear();
   game.helm.clear();
   game.clearMoveTarget();
+  if (drawPointer !== null && game.aiming && !touchLayout.matches) game.toggleBow();
   game.abortDraw();
   drawPointer = null;
   pointer = null;
@@ -220,6 +229,10 @@ function toggleBow() {
 
 function showMenu(name: Menu) {
   clearInputs();
+  if (name !== currentMenu) {
+    loadingLocation?.abort();
+    loadingLocation = null;
+  }
   currentMenu = name;
   if (!menu.open) {
     focusAfterDialog = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -255,6 +268,24 @@ function heading(title: string, context: string, close = true) {
     ${close ? '<button data-action="close-menu" aria-label="Закрыть">×</button>' : ''}</header>`;
 }
 
+function artelRow(name: string, effect: string, action: string, label: string, disabled: boolean, id = '') {
+  return `<div class="menu-row artel-row"><div><strong>${name}</strong><small>${effect}</small></div>
+    <button type="button" data-action="${action}" data-id="${id}" aria-label="${name} · ${label}"
+      ${disabled ? 'disabled' : ''}>${label}</button></div>`;
+}
+
+function buildingRow(id: ArtelBuilding, name: string, effect: string) {
+  const level = game.meta.artel.buildings[id];
+  const cost = game.artelUpgradePrice(id);
+  const label = cost === null ? 'Макс. уровень' : `${level ? 'Улучшить' : 'Построить'} · ${cost} др.`;
+  return artelRow(name, level ? `Уровень ${level}. ${effect}` : effect,
+    'artel-build', label, cost === null || game.meta.gold < cost, id);
+}
+
+function artelStatus() {
+  return `<p class="artel-notice" role="status">${artelNotice}</p>`;
+}
+
 function renderMenu() {
   const previous = menuContent.contains(document.activeElement) && document.activeElement instanceof HTMLButtonElement
     ? document.activeElement.dataset : null;
@@ -279,73 +310,97 @@ function renderMenu() {
 
   delete menu.dataset.mode;
   if (currentMenu === 'map') {
-    const locked = selectedZone === 'temple' && !game.meta.boat;
+    const locked = !game.unlocked(selectedZone);
     const cards = zones.map(zone => {
       const id = zone.id as LocationSlot;
       const info = locationInfo[id];
-      const isLocked = id === 'temple' && !game.meta.boat;
+      const isLocked = !game.unlocked(id);
       return `<button class="location" data-action="zone" data-id="${id}" data-locked="${isLocked}" aria-pressed="${selectedZone === id}" ${loadingLocation ? 'disabled' : ''}>
         <span class="eyebrow">${zone.number}</span><strong>${info.name}</strong>
-        <small>${info.description}</small>${isLocked ? '<p>Требуется парус из мастерской</p>' : ''}</button>`;
+        <small>${info.description}</small>${isLocked ? '<p>Исследуй локацию в обсерватории</p>' : ''}</button>`;
     }).join('');
-    menuContent.innerHTML = `${heading('Выбор места', 'Лодка')}<div class="locations">${cards}</div>
-      <div class="button-row"><span>Подношения · ${game.meta.offerings}</span>
-      <button class="primary" data-action="sail" ${locked || loadingLocation || fittingSail || !scene ? 'disabled' : ''}>Выйти на воду</button></div>
-      <p class="map-notice" role="status">${loadingLocation ? 'Готовим лодку и локацию…' : fittingSail ? 'Устанавливаем парус…' : mapNotice}</p>`;
+    menuContent.innerHTML = `${heading('Выбор места', 'Вылазка')}<div class="locations">${cards}</div>
+      <div class="button-row"><span>Корпус · ${game.hull} / ${game.maxHull}</span>
+      ${game.hull <= 0 ? '<button data-action="workshop">К лодочной станции</button>' : ''}
+      ${locked ? '<button data-action="observatory">К обсерватории</button>' : ''}
+      <button class="primary" data-action="sail" ${locked || !game.hull || loadingLocation || !scene ? 'disabled' : ''}>Выйти на воду</button></div>
+      <p class="map-notice" role="status">${loadingLocation ? 'Готовим лодку и локацию…' : mapNotice}</p>`;
   } else if (currentMenu === 'shop') {
     const catchForSale = parlor.inventory();
-    const value = catchForSale.reduce((sum, item) => sum + item.price * item.count, 0);
+    const value = game.saleValue;
+    const bonus = value - catchForSale.reduce((sum, item) => sum + item.price * item.count, 0);
+    const debt = game.meta.artel.repairDebt;
+    const rodCost = game.rodPrice;
+    const rodEffect = rodCost !== null ? 'Новая удочка увеличивает дальность заброса.'
+      : game.artelUpgradePrice('market') === null ? 'Лучшая удочка снаряжена.' : 'Следующая удочка требует улучшения рынка.';
     const label = (item: typeof catchForSale[number]) => fish[item.id].name
       + (item.condition ? ` (${conditionNames[item.condition].toLowerCase()})` : '');
     const catchNames = catchForSale.map(item => `${label(item)} × ${item.count}`).join(' · ');
-    menuContent.innerHTML = `${heading('Рыбная лавка', `Итака · ${game.meta.gold} др.`)}
+    menuContent.innerHTML = `${heading('Рыбацкий рынок', `Итака · ${game.meta.gold} др.`)}
       <div class="menu-row"><div><strong>Улов на продажу</strong><small>${catchNames || 'Пока пусто'}</small></div>
       <button class="primary" data-action="sell" ${catchForSale.length ? '' : 'disabled'}>Продать · ${value} др.</button></div>
+      ${bonus > 0 ? `<p class="artel-bonus">Бонус за объём улова · +${bonus} др.</p>` : ''}
+      ${debt > 0 ? `<p class="panel-text">С выручки удерживается долг за ремонт · ${debt} др.</p>` : ''}
       ${catchForSale.length ? `<details class="harbor-fish-sales" ${shopSalesExpanded ? 'open' : ''}>
-        <summary>Продать одну рыбу</summary><ul>${catchForSale.map(item => `<li>
-          <span>${label(item)} · ${item.count} шт.</span><button type="button" data-action="sell-one"
-          data-id="${stakeKey(item)}" aria-label="Продать одну · ${label(item)} · ${item.price} др.">+${item.price} др.</button></li>`).join('')}</ul>
+        <summary>Продать одну рыбу</summary><ul>${catchForSale.map(item => {
+          const unitPrice = game.salePrice(item);
+          return `<li><span>${label(item)} · ${item.count} шт.</span><button type="button" data-action="sell-one"
+            data-id="${stakeKey(item)}" aria-label="Продать одну · ${label(item)} · ${unitPrice} др.">+${unitPrice} др.</button></li>`;
+        }).join('')}</ul>
       </details>` : ''}
-      <p id="shop-notice" role="status">${shopNotice}</p>`;
+      ${buildingRow('market', 'Рыбацкий рынок', 'Улучшение открывает следующую удочку.')}
+      ${artelRow('Удочка', `Уровень ${game.meta.artel.rod + 1}. ${rodEffect}`,
+      'artel-rod', rodCost === null ? 'Недоступно' : `Купить · ${rodCost} др.`,
+      rodCost === null || game.meta.gold < rodCost)}
+      ${artelStatus()}`;
   } else if (currentMenu === 'workshop') {
-    const upgrades = [
-      { id: 'boat', name: 'Парус для лодки', effect: 'Заменяет вёсла и открывает Гавань затонувшего лика.' },
-      { id: 'line', name: 'Крепкая леска', effect: 'Натяжение нарастает медленнее.' },
-      { id: 'offering', name: 'Подношение', effect: 'Снижает гнев до стадии Ярости.' }
-    ] as const;
-    menuContent.innerHTML = `${heading('Мастерская', `Итака · ${game.meta.gold} др.`)}
-      ${game.meta.quotaMet ? '' : '<p class="panel-text">Улучшения откроются после первой выполненной квоты.</p>'}
-      ${upgrades.map(({ id, name, effect }) => {
-        const cost = game.balance.economy[id];
-        const bought = id !== 'offering' && game.meta[id];
-        const fitting = id === 'boat' && fittingSail;
-        const status = bought ? (id === 'boat' ? 'Установлен' : 'Куплена') : fitting ? 'Устанавливаем…' : cost + ' др.';
-        return `<div class="menu-row"><div><strong>${name}</strong><small>${effect}</small></div>
-          <button data-action="buy" data-id="${id}" aria-label="${name} · ${status}"
-          ${bought || fittingSail || !game.meta.quotaMet || game.meta.gold < cost ? 'disabled' : ''}>${status}</button></div>`;
-      }).join('')}
-      <p id="workshop-notice" role="status">${workshopNotice}</p>`;
+    const canRepairOnCredit = game.hull === 0 && game.meta.gold < game.repairPrice;
+    const holdCost = game.holdPrice;
+    menuContent.innerHTML = `${heading('Лодочная станция', `Итака · ${game.meta.gold} др.`)}
+      ${artelRow('Корпус лодки', `Прочность ${game.hull} / ${game.maxHull}.`,
+        'artel-repair', game.hull >= game.maxHull ? 'Исправен'
+          : canRepairOnCredit ? `В долг · ${game.repairPrice} др.` : `Починить · ${game.repairPrice} др.`,
+        game.hull >= game.maxHull || (!canRepairOnCredit && game.meta.gold < game.repairPrice))}
+      ${buildingRow('station', 'Лодочная станция', 'Улучшение укрепляет корпус и ускоряет ход лодки.')}
+      ${artelRow('Расширение трюма', `Уровень ${game.meta.artel.holdLevel + 1}. Дополнительное место под улов.`,
+        'artel-hold', holdCost === null ? 'Недоступно' : `Расширить · ${holdCost} др.`,
+        holdCost === null || game.meta.gold < holdCost)}
+      ${artelStatus()}`;
+  } else if (currentMenu === 'tasks') {
+    menuContent.innerHTML = `${heading('Доска заданий', `Итака · ${game.meta.gold} др.`)}
+      ${game.artelTasks.map(task => artelRow(task.title, `${Math.min(task.progress, task.target)} / ${task.target}`,
+        'artel-claim', task.claimed ? 'Получено' : `Забрать · ${task.reward} др.`,
+        task.claimed || task.progress < task.target, task.id)).join('')}
+      ${artelStatus()}`;
+  } else if (currentMenu === 'shrine') {
+    menuContent.innerHTML = `${heading('Святилище Посейдона', `Итака · ${game.meta.gold} др.`)}
+      ${buildingRow('shrine', 'Святилище Посейдона', 'Каждый уровень замедляет накопление гнева во время вылазки.')}
+      ${artelStatus()}`;
+  } else if (currentMenu === 'observatory') {
+    const cost = game.researchPrice('temple');
+    const known = game.unlocked('temple');
+    const reason = game.meta.artel.buildings.observatory ? 'Доступно для исследования' : 'Сначала построй обсерваторию';
+    menuContent.innerHTML = `${heading('Обсерватория', `Итака · ${game.meta.gold} др.`)}
+      ${buildingRow('observatory', 'Обсерватория', 'Открывает исследования новых мест для вылазок.')}
+      ${artelRow(locationInfo.temple.name, known ? 'Доступна на карте вылазок' : reason,
+        'artel-research', known ? 'Открыта' : cost === null ? 'Закрыта' : `Исследовать · ${cost} др.`,
+        known || cost === null || game.meta.gold < cost, 'temple')}
+      ${artelStatus()}`;
   } else if (currentMenu === 'result' && game.result) {
     const result = game.result;
-    const details: Record<string, string> = {
-      quota: 'Квота не выполнена. Улов и опыт вылазки потеряны.',
-      wrath: 'Последняя волна накрыла лодку. Улов и опыт вылазки потеряны.',
-      health: 'Одиссей не смог продолжить. Улов и опыт вылазки потеряны.'
-    };
-    menuContent.innerHTML = `${heading(result.success ? 'Улов доставлен' : 'Вылазка сорвалась',
+    const details = result.reason === 'wrath'
+      ? 'Гнев Посейдона достиг 100%. Улов вылазки потерян.'
+      : 'Корпус разрушен. Улов вылазки потерян, лодку можно починить на Итаке.';
+    menuContent.innerHTML = `${heading(result.success ? (result.count ? 'Улов доставлен' : 'Возвращение на Итаку') : 'Вылазка сорвалась',
       locationInfo[result.zone as LocationSlot].name, false)}
       <div class="tide-result-art" data-outcome="${result.success ? 'success' : 'failure'}" aria-hidden="true"></div>
-      <p class="panel-text">${result.success ? 'Улов можно продать в рыбной лавке на Итаке.' : details[result.reason]}</p>
+      <p class="panel-text">${result.success
+        ? (result.count ? 'Улов можно продать на рыбацком рынке.' : 'Лодка у причала, вылазка завершена.')
+        : details}</p>
       <div class="report"><span><strong>${result.count + Number(!result.success && result.lostPending)}</strong>${result.success ? 'Рыб доставлено' : 'Рыб потеряно'}</span>
-      <span><strong>${result.score} / ${game.balance.economy.quota}</strong>Квота</span>
-      <span><strong>+${result.success ? result.xp : 0}</strong>Опыт</span>
-      ${result.success ? `<span><strong>${result.value} др.</strong>Цена улова</span>` : ''}</div>
+      <span><strong>${game.hull} / ${game.maxHull}</strong>Прочность</span>
+      ${result.success ? `<span><strong>+${result.xp}</strong>Опыт</span><span><strong>${result.value} др.</strong>Цена улова</span>` : ''}</div>
       <div class="button-row"><button class="primary" data-action="close-menu">На Итаку</button></div>`;
-  } else if (currentMenu === 'exit') {
-    menuContent.innerHTML = `${heading('Вернуться раньше?', 'Квота не выполнена', false)}
-      <p class="panel-text">Если уйти сейчас, улов и опыт этой вылазки пропадут.</p>
-      <div class="button-row"><button data-action="close-menu">Продолжить рыбалку</button>
-      <button data-action="confirm-return">Вернуться без улова</button></div>`;
   }
 
   if (previous?.action) {
@@ -366,27 +421,32 @@ function renderWater() {
   water.dataset.stage = String(stage);
   setText(hud.stage, `${['I', 'II', 'III'][stage - 1]} · ${stages[stage - 1]}`);
   paintMeter(hud.wrath, run.wrath);
-  setText(hud.wrathNumber, `${Math.round(run.wrath)}%`);
-  setText(hud.quota, `${game.score} / ${game.balance.economy.quota}`);
-  setText(hud.health, `${run.health} / ${game.balance.wrath.health}`);
-  setText(hud.offerings, String(game.meta.offerings));
+  setText(hud.wrathNumber, `${Math.floor(run.wrath)}%`);
+  setText(hud.health, `${run.health} / ${game.maxHull}`);
+  paintMeter(hud.stamina, game.stamina);
+  setText(hud.staminaNumber, `${Math.floor(game.stamina)}%`);
+  hud.stamina.parentElement?.toggleAttribute('data-insufficient', game.stamina < actionCost);
   setText(hud.notice, run.noticeFor > 0 ? run.notice : '');
-  hud.holdButton.disabled = phase !== 'ready' || game.aiming;
-  hud.offeringButton.disabled = !game.meta.offerings || phase === 'surge';
-  hud.returnButton.disabled = phase === 'pack' || phase === 'surge' || inspectingHold;
-  hud.attack.hidden = !game.monster;
+  hud.holdButton.disabled = phase === 'surge';
+  hud.returnButton.disabled = phase !== 'ready' || !hold.hidden;
+  const returnPoint = game.returnPoint;
+  setText(hud.returnButton, game.atReturnPoint ? 'На Итаку'
+    : returnPoint ? `К причалу · ${Math.ceil(distance(game.position, returnPoint))} м` : 'К причалу');
+  const waveWarning = game.waves.some(wave => wave.age < wave.warningTime);
+  hud.attack.hidden = !game.monster && !waveWarning;
   if (game.monster) {
     const threat = game.monster.windup > 0 ? 'готовит удар!'
       : game.monster.age < enemyTiming.emerge ? 'всплывает' : 'идёт к лодке';
-    setText(hud.attack, `${enemyNames[game.monster.kind]} ${threat}`);
+    setText(hud.attack, `${enemyNames[game.monster.kind]} ${threat}${waveWarning ? ' · Волна' : ''}`);
+  } else if (waveWarning) {
+    setText(hud.attack, 'Волна · выйди из красной полосы');
   }
-  hud.bow.disabled = phase === 'surge';
-  hud.bow.setAttribute('aria-pressed', String(game.aiming));
   const mobile = touchLayout.matches;
   if (phase !== 'ready') mobileCastArmed = false;
   hud.mobileCast.disabled = phase !== 'ready';
   hud.mobileCast.setAttribute('aria-pressed', String(mobileCastArmed));
-  hud.mobileBow.disabled = phase === 'surge' || Boolean(game.arrow);
+  hud.mobileDash.disabled = phase !== 'ready' || game.aiming || game.stamina < actionCost;
+  hud.mobileBow.disabled = phase === 'surge' || (!game.aiming && (Boolean(game.arrow) || game.stamina < actionCost));
   hud.mobileBow.setAttribute('aria-pressed', String(game.aiming));
   hud.mobileFish.hidden = !mobile || game.aiming || (phase !== 'hook' && phase !== 'reel');
   hud.mobileSteer.hidden = !mobile || game.aiming || phase !== 'struggle';
@@ -450,7 +510,7 @@ function renderWater() {
     ready: game.drawing
       ? '<strong>Отпусти <kbd>ЛКМ</kbd>, когда кольцо попадёт в косяк</strong>'
       : hasCast
-        ? '<span><kbd>ЛКМ</kbd> Заброс <kbd>WASD</kbd> Лодка</span>'
+        ? '<span><kbd>ЛКМ</kbd> Заброс <kbd>ПКМ</kbd> Лук <kbd>WASD</kbd> Лодка <kbd>Пробел</kbd> Рывок</span>'
         : '<strong>Забрось к рыбе</strong><span>Удерживай <kbd>ЛКМ</kbd> для выбора дальности. Лодка <kbd>WASD</kbd></span>',
     cast: '<strong>Поплавок в полёте</strong>',
     wait: '<span>Следи за поплавком</span>',
@@ -463,8 +523,18 @@ function renderWater() {
     surge: '<strong>Последняя волна</strong>'
   };
   hud.phase.innerHTML = game.aiming
-    ? '<strong>Лук в руках</strong><span>Удерживай <kbd>ЛКМ</kbd> для натяжения, отпусти для выстрела</span>'
+    ? '<strong>Лук в руках</strong><span>Удерживай <kbd>ПКМ</kbd> для натяжения, отпусти для выстрела</span>'
     : descriptions[phase];
+}
+
+function toggleHold() {
+  const run = game.run;
+  if (!run || run.phase === 'surge' || run.pending) return false;
+  clearInputs();
+  inspectingHold = !inspectingHold;
+  renderHold(inspectingHold);
+  if (!inspectingHold) hud.holdButton.focus();
+  return true;
 }
 
 function renderHold(focus = false) {
@@ -472,39 +542,57 @@ function renderHold(focus = false) {
   const pending = run?.phase === 'pack' ? run.pending : null;
   const previous = hold.contains(document.activeElement) && document.activeElement instanceof HTMLButtonElement
     ? document.activeElement.dataset : null;
-  hold.hidden = !run || game.aiming || (!pending && !inspectingHold);
+  hold.hidden = !run || run.phase === 'surge' || (!pending && !inspectingHold);
   cover.hidden = hold.hidden;
   gameHeader.inert = water.inert = waterInspector.inert = !hold.hidden;
   if (hold.hidden || !run) {
+    cargoDraft = null;
     if (previous && run) water.focus({ preventScroll: true });
     return;
   }
 
   const { columns, rows } = run.grid;
+  const placements = new Map<number, { item: Cargo; icon: boolean }>();
+  for (const item of run.cargo) {
+    cargoCells(item).forEach(({ x, y }, index) => placements.set(y * columns + x, { item, icon: index === 0 }));
+  }
   const cells = Array.from({ length: columns * rows }, (_, i) => {
     const x = i % columns;
     const y = Math.floor(i / columns);
+    const placement = placements.get(i);
+    const item = placement?.item;
+    const kind = item ? fish[item.id] : null;
+    const label = `Ячейка ${x + 1}, ${y + 1}${kind ? ` · ${kind.name}` : ''}`;
     return `<button class="cell" data-action="cell" data-x="${x}" data-y="${y}"
-      style="grid-area:${y + 1} / ${x + 1}" aria-label="Ячейка ${x + 1}, ${y + 1}" ${pending ? '' : 'disabled'}></button>`;
+      ${item ? `data-cargo="${item.key}" data-fish="${item.id}"` : ''}
+      ${item && cargoDraft?.key === item.key ? 'data-draft' : ''}
+      style="grid-area:${y + 1} / ${x + 1}${kind ? `;--fish:${kind.color}` : ''}"
+      aria-label="${label}" ${item || pending || cargoDraft ? '' : 'disabled'}>
+      ${placement?.icon ? '<span class="cargo-cell-icon" aria-hidden="true"></span>' : ''}</button>`;
   }).join('');
-  const cargo = run.cargo.map(item => {
-    const [w, h] = game.dimensions(item);
-    const kind = fish[item.id as FishId];
-    return `<div class="cargo-item" data-fish="${item.id}" style="--fish:${kind.color};grid-area:${item.y + 1} / ${item.x + 1} / span ${h} / span ${w}">${kind.name} · ${item.count}</div>`;
-  }).join('');
-  const releaseOptions = run.cargo.map(item => `<button data-action="release-old" data-id="${item.key}">Выпустить · ${fish[item.id as FishId].name}</button>`).join('');
-  const size = pending ? game.dimensions(pending).join(' × ') : '';
+  const fishButtons = run.cargo.map(item => `<button data-action="select-cargo" data-id="${item.key}"
+    aria-pressed="${cargoDraft?.key === item.key}">${fish[item.id].name}${item.count > 1 ? ` ×${item.count}` : ''}</button>`).join('');
   const kind = pending ? fish[pending.id as FishId] : null;
-  const stack = run.cargo.some(item => item.id === pending?.id && item.count < game.balance.economy.stackLimit);
-  hold.innerHTML = `<header class="panel-head"><div><span class="eyebrow">Квота · ${game.score} / ${game.balance.economy.quota}</span>
+  const moving = cargoDraft ? fish[cargoDraft.id].name : '';
+  const hint = moving ? `Выбери новую ячейку для рыбы «${moving}».`
+    : pending ? 'Выбери место для улова. Рыбу в трюме можно передвинуть.'
+      : run.cargo.length ? 'Выбери рыбу, чтобы передвинуть, повернуть или выпустить её.' : 'Трюм пока пуст.';
+  const active = cargoDraft ?? pending;
+  const footprint = active ? cargoCells(active, 0, 0) : [];
+  const [footprintColumns] = active ? game.dimensions(active) : [0, 0];
+  hold.innerHTML = `<header class="panel-head"><div><span class="eyebrow">Пауза · ${placements.size} / ${columns * rows} ячеек</span>
     <h2 id="hold-title">${pending ? 'Уложить улов' : 'Трюм'}</h2></div>
     ${pending ? '' : '<button data-action="hold" aria-label="Закрыть трюм">×</button>'}</header>
-    ${kind && pending ? `<div class="pending" data-fish="${pending.id}" style="--fish:${kind.color}"><strong>${kind.name}</strong><span>${kind.tier} · ${size} · ${price(pending.id as FishId)} др.</span></div>
-    <p class="panel-text">Выбери левую верхнюю ячейку для рыбы.</p>` : ''}
-    <div class="cargo-grid" style="--cols:${columns};--rows:${rows}">${cells}${cargo}</div>
-    <div class="cargo-actions">${releaseOptions}</div>
-    ${pending ? `<div class="button-row"><button data-action="rotate">Повернуть <kbd>R</kbd></button>
-      <button data-action="stack" ${stack ? '' : 'disabled'}>Сложить с такой же</button><button data-action="release">Выпустить рыбу</button></div>` : ''}
+    ${kind && pending ? `<div class="pending" data-fish="${pending.id}" style="--fish:${kind.color}"><strong>${kind.name}</strong><span>${kind.tier} · ${cargoCells(pending).length} кл. · ${price(pending.id as FishId)} др.</span></div>` : ''}
+    <div class="hold-placement"><p class="panel-text">${hint}</p>${active ? `<span class="cargo-footprint"
+      style="--footprint-columns:${footprintColumns};--fish:${fish[active.id].color}" aria-hidden="true">${footprint.map(
+        ({ x, y }) => `<i style="grid-area:${y + 1} / ${x + 1}"></i>`,
+      ).join('')}</span>` : ''}</div>
+    <div class="cargo-grid" style="--cols:${columns};--rows:${rows}">${cells}</div>
+    ${fishButtons ? `<div class="cargo-actions" aria-label="Улов в трюме">${fishButtons}</div>` : ''}
+    ${pending || cargoDraft ? `<div class="button-row"><button data-action="rotate">Повернуть <kbd>R</kbd></button>
+      ${cargoDraft ? '<button data-action="cancel-cargo">Отменить перемещение</button><button data-action="release-old">Выпустить выбранную</button>'
+        : '<button data-action="release">Выпустить рыбу</button>'}</div>` : ''}
     <p id="hold-note" role="status"></p>`;
   const buttons = [...hold.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')];
   const replacement = previous && buttons.find(button => button.dataset.action === previous.action
@@ -513,20 +601,32 @@ function renderHold(focus = false) {
 }
 
 function highlightCell(cell: HTMLElement | null) {
-  const pending = game.run?.pending;
+  const item = cargoDraft ?? game.run?.pending;
   for (const previous of hold.querySelectorAll<HTMLElement>('[data-preview]')) delete previous.dataset.preview;
-  if (!cell || !pending) return;
+  if (!cell || !item) return;
   const x = Number(cell.dataset.x);
   const y = Number(cell.dataset.y);
-  const [w, h] = game.dimensions(pending);
-  const fit = game.fits(pending, x, y);
+  const cells = cargoCells(item, x, y);
+  const fit = game.fits(item, x, y, cargoDraft?.key);
   for (const button of hold.querySelectorAll<HTMLButtonElement>('.cell')) {
     const col = Number(button.dataset.x);
     const row = Number(button.dataset.y);
-    if (col >= x && col < x + w && row >= y && row < y + h) {
+    if (cells.some(position => position.x === col && position.y === row)) {
       button.dataset.preview = fit ? 'fits' : 'blocked';
     }
   }
+}
+
+function selectCargo(key: number) {
+  const item = game.run?.cargo.find(cargo => cargo.key === key);
+  cargoDraft = item && key !== cargoDraft?.key ? { ...item } : null;
+  renderHold(true);
+}
+
+function rotateHold() {
+  if (cargoDraft) cargoDraft = rotateCargo(cargoDraft);
+  else game.rotate();
+  renderHold();
 }
 
 function processEvents() {
@@ -552,6 +652,7 @@ function processEvents() {
         if (game.run) renderHold(true);
         break;
       case 'pack':
+      case 'cargo':
         renderHold();
         break;
       case 'phase':
@@ -569,7 +670,8 @@ function processEvents() {
         showDock();
         showMenu('result');
         break;
-      case 'offering':
+      case 'injury':
+      case 'artel-progress':
         save();
         break;
     }
@@ -577,7 +679,7 @@ function processEvents() {
 }
 
 async function sail() {
-  if (!scene || loadingLocation || fittingSail || (selectedZone === 'temple' && !game.meta.boat)) return;
+  if (!scene || currentMenu !== 'map' || loadingLocation || !game.hull || !game.unlocked(selectedZone)) return;
   const request = new AbortController();
   const zone = selectedZone;
   loadingLocation = request;
@@ -623,27 +725,6 @@ async function sail() {
   renderWater();
 }
 
-async function buySail() {
-  if (!scene || fittingSail || game.meta.boat || !game.meta.quotaMet || game.meta.gold < game.balance.economy.boat) return;
-  fittingSail = true;
-  workshopNotice = 'Устанавливаем парус…';
-  renderMenu();
-  try {
-    await scene.prepareSail();
-    if (!game.polyphemus.round && game.buy('boat')) {
-      workshopNotice = 'Парус установлен. Гавань затонувшего лика открыта.';
-      save();
-      updateDock();
-    }
-  } catch (error) {
-    workshopNotice = 'Парус не загрузился. Попробуй купить его ещё раз.';
-    console.warn('Sail model could not be loaded', error);
-  } finally {
-    fittingSail = false;
-    if (currentMenu === 'workshop' || currentMenu === 'map') renderMenu();
-  }
-}
-
 function updatePolyphemus(now: number, cashOut = false) {
   const parlor = game.polyphemus;
   if (parlor.settle(now, cashOut)) {
@@ -656,6 +737,13 @@ function updatePolyphemus(now: number, cashOut = false) {
   if (quote) paintPolyphemus?.(quote);
 }
 
+function artelChange(message: string) {
+  artelNotice = message;
+  save();
+  updateDock();
+  renderMenu();
+}
+
 function action(button: HTMLButtonElement) {
   const { action, id } = button.dataset;
   if (water.contains(button)) zoneIntro.hidden = true;
@@ -665,16 +753,19 @@ function action(button: HTMLButtonElement) {
       break;
     case 'shop':
     case 'poly-shop':
-      shopNotice = '';
+      artelNotice = '';
       shopSalesExpanded = false;
       showMenu('shop');
       break;
     case 'workshop':
-      workshopNotice = '';
-      showMenu('workshop');
+    case 'tasks':
+    case 'shrine':
+    case 'observatory':
+      artelNotice = '';
+      showMenu(action);
       break;
     case 'polyphemus':
-      if (!game.run && !game.result && !fittingSail) showMenu('polyphemus');
+      if (!game.run && !game.result) showMenu('polyphemus');
       break;
     case 'poly-start': {
       if (currentMenu !== 'polyphemus' || game.run || game.result) break;
@@ -717,32 +808,47 @@ function action(button: HTMLButtonElement) {
       const stake = action === 'sell-one' ? game.polyphemus.inventory().find(item => stakeKey(item) === id) : undefined;
       if (action === 'sell-one' && !stake) break;
       shopSalesExpanded = Boolean(menuContent.querySelector('.harbor-fish-sales[open]'));
-      const value = stake ? game.polyphemus.sell(stake) : game.sell();
-      shopNotice = `За улов получено ${value} др.`;
-      save();
-      updateDock();
-      renderMenu();
+      const before = game.meta.gold;
+      const debt = game.meta.artel.repairDebt;
+      if (stake) game.sellStake(stake);
+      else game.sell();
+      const paid = debt - game.meta.artel.repairDebt;
+      artelChange(`За улов получено ${game.meta.gold - before} др.${paid ? ` В счёт ремонта удержано ${paid} др.` : ''}`);
       break;
     }
-    case 'buy':
-      if (currentMenu !== 'workshop' || game.polyphemus.round) break;
-      if (id === 'boat') {
-        void buySail();
-      } else if (id && game.buy(id)) {
-        workshopNotice = 'Покупка сделана.';
-        save();
-        updateDock();
-        renderMenu();
+    case 'artel-build': {
+      const building = currentMenu ? menuBuilding[currentMenu] : undefined;
+      if (!building || building !== id) break;
+      const level = game.meta.artel.buildings[building];
+      if (level ? game.upgradeArtel(building) : game.buildArtel(building)) {
+        artelChange(level ? 'Здание улучшено.' : 'Здание построено.');
       }
       break;
+    }
+    case 'artel-rod':
+      if (currentMenu === 'shop' && game.buyRod()) artelChange('Новая удочка снаряжена.');
+      break;
+    case 'artel-repair':
+      if (currentMenu === 'workshop' && game.repairHull()) artelChange('Корпус восстановлен.');
+      break;
+    case 'artel-hold':
+      if (currentMenu === 'workshop' && game.expandHold()) artelChange('Трюм расширен.');
+      break;
+    case 'artel-research':
+      if (currentMenu === 'observatory' && id === 'temple' && game.researchLocation(id)) {
+        artelChange('Гавань затонувшего лика открыта на карте.');
+      }
+      break;
+    case 'artel-claim': {
+      const task = game.artelTasks.find(task => task.id === id);
+      if (currentMenu === 'tasks' && task && game.claimTask(task.id)) artelChange('Награда получена.');
+      break;
+    }
     case 'primary':
       if (hold.hidden) game.primary();
       break;
-    case 'offering':
-      game.offering();
-      break;
-    case 'bow':
-      toggleBow();
+    case 'dash':
+      if (hold.hidden) game.dash();
       break;
     case 'mobile-cast': {
       if (!touchLayout.matches || game.run?.phase !== 'ready') break;
@@ -759,40 +865,46 @@ function action(button: HTMLButtonElement) {
       if (touchLayout.matches && hold.hidden) game.primary();
       break;
     case 'return':
-      if (game.score >= game.balance.economy.quota) game.finish();
-      else showMenu('exit');
-      break;
-    case 'confirm-return':
-      closeMenu();
-      game.finish();
+      if (game.atReturnPoint) game.finish();
+      else if (game.run) game.tell('Подведи лодку к золотому кругу у причала.');
       break;
     case 'hold':
-      if (game.run?.phase === 'ready') {
-        clearInputs();
-        inspectingHold = !inspectingHold;
-        renderHold(inspectingHold);
-        if (!inspectingHold) hud.holdButton.focus();
+      toggleHold();
+      break;
+    case 'cell': {
+      const { x, y, cargo } = button.dataset;
+      if (cargoDraft) {
+        const { key, rotation, turned } = cargoDraft;
+        if (game.moveCargo(key, rotation ?? Number(turned), Number(x), Number(y))) cargoDraft = null;
+        else byId('hold-note').textContent = 'Здесь рыба не поместится. Выбери другую ячейку.';
+      } else if (game.run?.pending) {
+        if (!game.pack(Number(x), Number(y))) {
+          byId('hold-note').textContent = 'Рыба не помещается. Выбери другую ячейку, поверни или освободи место.';
+        }
+      } else if (cargo) {
+        selectCargo(Number(cargo));
       }
       break;
-    case 'cell':
-      if (game.run?.pending && !game.pack(Number(button.dataset.x), Number(button.dataset.y))) {
-        byId('hold-note').textContent = 'Рыба не помещается. Выбери другую ячейку, поверни или освободи место.';
-      }
-      break;
+    }
     case 'rotate':
-      game.rotate();
-      renderHold();
-      hold.querySelector<HTMLButtonElement>('[data-action="rotate"]')?.focus();
+      rotateHold();
       break;
-    case 'stack':
-      game.stack();
+    case 'select-cargo':
+      selectCargo(Number(id));
+      break;
+    case 'cancel-cargo':
+      cargoDraft = null;
+      renderHold(true);
       break;
     case 'release':
       game.release(undefined);
       break;
     case 'release-old':
-      game.release(Number(id));
-      renderHold(true);
+      if (cargoDraft) {
+        const key = cargoDraft.key;
+        cargoDraft = null;
+        game.release(key);
+      }
       break;
   }
   processEvents();
@@ -816,6 +928,23 @@ hold.addEventListener('pointerover', event => highlightCell((event.target as HTM
 hold.addEventListener('pointerleave', () => highlightCell(null));
 hold.addEventListener('focusin', event => highlightCell((event.target as HTMLElement).closest('.cell')));
 hold.addEventListener('keydown', event => {
+  if (event.altKey || event.ctrlKey || event.metaKey) return;
+  if (event.code === 'KeyR') {
+    event.preventDefault();
+    if (!event.repeat) rotateHold();
+    return;
+  }
+  if (event.code === 'Escape') {
+    event.preventDefault();
+    if (cargoDraft) {
+      cargoDraft = null;
+      renderHold(true);
+    } else {
+      toggleHold();
+      renderWater();
+    }
+    return;
+  }
   if (event.key !== 'Tab') return;
   const buttons = hold.querySelectorAll<HTMLButtonElement>('button:not(:disabled)');
   const first = buttons[0];
@@ -875,18 +1004,21 @@ document.addEventListener('keydown', event => {
     return;
   }
   const run = game.run;
-  if (!run || menu.open || event.altKey || event.ctrlKey || event.metaKey) return;
+  if (!run || menu.open || event.defaultPrevented || !hold.hidden || event.altKey || event.ctrlKey || event.metaKey) return;
+  if (event.code === 'Tab' && !event.shiftKey) {
+    if (!event.repeat && toggleHold()) {
+      event.preventDefault();
+      renderWater();
+    }
+    return;
+  }
   const focusedButton = event.target instanceof HTMLButtonElement ? event.target : null;
   if (event.code === 'Space' && focusedButton && (hold.contains(focusedButton)
     || focusedButton.dataset.action === 'primary' || (run.phase === 'ready' && focusedButton.matches(':focus-visible')))) return;
   const input = inputKeys[event.code];
-  const bowKey = event.code === 'KeyF';
   const helm = helmKeys[event.code];
-  const offering = event.code === 'KeyO';
-  const rotate = event.code === 'KeyR' && run.phase === 'pack';
   const escape = event.code === 'Escape';
-  if (!input && !helm && !bowKey && !offering && !rotate && !escape) return;
-  if (input && !hold.hidden) return;
+  if (!input && !helm && !escape) return;
   zoneIntro.hidden = true;
   event.preventDefault();
   if (event.repeat) return;
@@ -896,13 +1028,8 @@ document.addEventListener('keydown', event => {
     keys.set(event.code, input);
     syncKeys();
   } else if (input === 'reel') {
-    game.primary();
-  }
-  if (bowKey) toggleBow();
-  if (offering && run.phase !== 'surge') game.offering();
-  if (rotate) {
-    game.rotate();
-    renderHold(true);
+    if (run.phase === 'ready') game.dash();
+    else game.primary();
   }
   if (escape) {
     if (game.aiming) toggleBow();
@@ -925,15 +1052,19 @@ document.addEventListener('keyup', event => {
   if (helm) game.helm.delete(helm);
 });
 sceneHost.addEventListener('pointerdown', event => {
-  if (event.button !== 0 || !scene || menu.open || !hold.hidden || drawPointer !== null) return;
+  if ((event.button !== 0 && event.button !== 2) || !scene || menu.open || !hold.hidden || drawPointer !== null
+    || !waterInspector.hidden) return;
   if (touchLayout.matches) {
-    if (!event.isPrimary || !waterInspector.hidden || !game.run || (!game.aiming && game.run.phase !== 'ready')) return;
+    if (event.button !== 0 || !event.isPrimary || !waterInspector.hidden || !game.run || (!game.aiming && game.run.phase !== 'ready')) return;
     event.preventDefault();
     waterTap = { id: event.pointerId, x: event.clientX, y: event.clientY };
     sceneHost.setPointerCapture(event.pointerId);
     return;
   }
-  if (!(game.aiming ? game.beginDraw() : game.beginCast())) return;
+  if (!(event.button === 2 ? game.beginBow() : game.beginCast())) {
+    if (event.button === 2 && game.run) event.preventDefault();
+    return;
+  }
   event.preventDefault();
   zoneIntro.hidden = true;
   water.focus({ preventScroll: true });
@@ -978,8 +1109,10 @@ sceneHost.addEventListener('pointerup', event => {
   if (drawPointer !== event.pointerId) return;
   drawPointer = null;
   game.target = scene?.pointAt(event.clientX, event.clientY, game.aiming) ?? null;
-  if (game.aiming) game.releaseArrow();
-  else {
+  if (game.aiming) {
+    game.releaseArrow();
+    game.toggleBow();
+  } else {
     hasCast = true;
     game.releaseCast();
   }
@@ -992,8 +1125,17 @@ for (const kind of ['pointercancel', 'lostpointercapture'] as const) {
     if (event.pointerId !== drawPointer) return;
     drawPointer = null;
     game.abortDraw();
+    if (game.aiming) game.toggleBow();
   });
 }
+sceneHost.addEventListener('contextmenu', event => {
+  if (game.run) event.preventDefault();
+});
+sceneHost.addEventListener('wheel', event => {
+  if (!event.deltaY || !game.run || game.firstPerson || !hold.hidden || menu.open || !waterInspector.hidden) return;
+  event.preventDefault();
+  scene?.zoomBy(Math.sign(event.deltaY));
+}, { passive: false });
 touchLayout.addEventListener('change', () => {
   updateTouchLayout();
   clearInputs();
@@ -1014,7 +1156,7 @@ function frame(now: number) {
     if ((game.aiming || game.drawing) && pointer) game.target = scene?.pointAt(pointer.clientX, pointer.clientY, game.aiming) ?? null;
     const run = game.run;
     const { x, z } = game.position;
-    game.step(dt);
+    if (hold.hidden) game.step(dt);
     if (dt > 0 && game.run === run) {
       boatSpeed = Math.hypot(game.position.x - x, game.position.z - z) / dt;
     }
